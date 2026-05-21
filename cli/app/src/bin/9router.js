@@ -5,7 +5,7 @@ const http = require("http");
 const path = require("path");
 const Module = require("module");
 
-const APP_VERSION = "0.4.62";
+const APP_VERSION = "0.4.63";
 const DEFAULT_PORT = 20128;
 const DEFAULT_HOST = "0.0.0.0";
 const appDir = path.resolve(__dirname, "../..");
