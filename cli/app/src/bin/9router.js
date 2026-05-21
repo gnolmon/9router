@@ -8,7 +8,7 @@ const Module = require("module");
 const APP_VERSION = "0.4.62";
 const DEFAULT_PORT = 20128;
 const DEFAULT_HOST = "0.0.0.0";
-const appDir = path.resolve(__dirname, "..");
+const appDir = path.resolve(__dirname, "../..");
 const runtimeNodeModules = path.join(appDir, "runtime-node_modules");
 const requiredServerFilesPath = path.join(appDir, ".next-cli-build", "required-server-files.json");
 
