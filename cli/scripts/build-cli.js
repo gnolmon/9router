@@ -8,6 +8,7 @@ const cliDir = path.resolve(__dirname, "..");
 const appDir = path.resolve(cliDir, "..");
 const rootDir = path.resolve(appDir, "..");
 const cliAppDir = path.join(cliDir, "app");
+const gitInstallLauncherTemplate = path.join(cliDir, "scripts", "templates", "git-install-launcher.js");
 const buildHomeDir = path.join(cliDir, ".build-home");
 const buildDistDirName = ".next-cli-build";
 const buildDistDir = path.join(appDir, buildDistDirName);
@@ -268,6 +269,21 @@ if (fs.existsSync(updaterSrc)) {
 } else {
   console.log("⏭️  No updater files found\n");
 }
+
+// Step 7c: Copy a stable launcher into the bundled app tree.
+// npm git installs can link directly to cached package dirs instead of unpacking
+// a full tarball layout, so the launcher has to live under cli/app where those
+// installs already preserve files reliably.
+console.log("7️⃣ c Copying git-install launcher...");
+const gitLauncherDest = path.join(cliAppDir, "src", "bin", "9router.js");
+fs.mkdirSync(path.dirname(gitLauncherDest), { recursive: true });
+const gitLauncherTemplate = fs.readFileSync(gitInstallLauncherTemplate, "utf8");
+fs.writeFileSync(
+  gitLauncherDest,
+  gitLauncherTemplate.replace(/__APP_VERSION__/g, cliPkg.version)
+);
+fs.chmodSync(gitLauncherDest, 0o755);
+console.log("✅ Copied git-install launcher\n");
 
 // Step 8: Build MITM server (config driven - see app/cli/scripts/buildMitm.js)
 console.log("8️⃣  Building MITM server...");
