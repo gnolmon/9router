@@ -1,5 +1,15 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
+import {
+  API_KEY_SCHEDULE_MODES,
+  API_KEY_SOURCES,
+  computeApiKeyIsActive,
+} from "@/lib/apiKeys/schedule.js";
+import { generateApiKeyWithMachine } from "@/shared/utils/apiKey.js";
+
+function boolFromDb(value) {
+  return value === 1 || value === true;
+}
 
 function rowToKey(row) {
   if (!row) return null;
@@ -8,9 +18,72 @@ function rowToKey(row) {
     key: row.key,
     name: row.name,
     machineId: row.machineId,
-    isActive: row.isActive === 1 || row.isActive === true,
+    isActive: boolFromDb(row.isActive),
+    source: row.source || API_KEY_SOURCES.MANUAL,
+    telegramUserId: row.telegramUserId || null,
+    scheduleMode: row.scheduleMode || API_KEY_SCHEDULE_MODES.NONE,
+    updatedAt: row.updatedAt || row.createdAt,
+    manualDisabled: boolFromDb(row.manualDisabled),
     createdAt: row.createdAt,
   };
+}
+
+function normalizeKeyRecord(data, now = new Date()) {
+  const nowIso = now.toISOString();
+  const normalized = {
+    id: data.id,
+    key: data.key,
+    name: data.name || null,
+    machineId: data.machineId || null,
+    source: data.source || API_KEY_SOURCES.MANUAL,
+    telegramUserId: data.telegramUserId ? String(data.telegramUserId) : null,
+    scheduleMode: data.scheduleMode || API_KEY_SCHEDULE_MODES.NONE,
+    manualDisabled: data.manualDisabled === true,
+    createdAt: data.createdAt || nowIso,
+    updatedAt: nowIso,
+  };
+  normalized.isActive = computeApiKeyIsActive(normalized, now);
+  return normalized;
+}
+
+function persistKey(db, key) {
+  db.run(
+    `INSERT INTO apiKeys(id, key, name, machineId, isActive, source, telegramUserId, scheduleMode, updatedAt, manualDisabled, createdAt)
+     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       key = excluded.key,
+       name = excluded.name,
+       machineId = excluded.machineId,
+       isActive = excluded.isActive,
+       source = excluded.source,
+       telegramUserId = excluded.telegramUserId,
+       scheduleMode = excluded.scheduleMode,
+       updatedAt = excluded.updatedAt,
+       manualDisabled = excluded.manualDisabled,
+       createdAt = excluded.createdAt`,
+    [
+      key.id,
+      key.key,
+      key.name,
+      key.machineId,
+      key.isActive ? 1 : 0,
+      key.source,
+      key.telegramUserId,
+      key.scheduleMode,
+      key.updatedAt,
+      key.manualDisabled ? 1 : 0,
+      key.createdAt,
+    ]
+  );
+}
+
+function normalizePatch(existing, data = {}) {
+  const patch = { ...data };
+  if (Object.prototype.hasOwnProperty.call(patch, "isActive")) {
+    patch.manualDisabled = patch.isActive === false;
+    delete patch.isActive;
+  }
+  return { ...existing, ...patch };
 }
 
 export async function getApiKeys() {
@@ -25,39 +98,85 @@ export async function getApiKeyById(id) {
   return rowToKey(row);
 }
 
-export async function createApiKey(name, machineId) {
+export async function getApiKeyByTelegramUserId(telegramUserId) {
+  const db = await getAdapter();
+  const row = db.get(`SELECT * FROM apiKeys WHERE telegramUserId = ?`, [String(telegramUserId)]);
+  return rowToKey(row);
+}
+
+export async function createApiKey(name, machineId, options = {}) {
   if (!machineId) throw new Error("machineId is required");
   const db = await getAdapter();
-  const { generateApiKeyWithMachine } = await import("@/shared/utils/apiKey");
   const result = generateApiKeyWithMachine(machineId);
-  const apiKey = {
+  const now = options.now instanceof Date ? options.now : new Date();
+  const apiKey = normalizeKeyRecord({
     id: uuidv4(),
-    name,
     key: result.key,
+    name,
     machineId,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  };
-  db.run(
-    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt) VALUES(?, ?, ?, ?, ?, ?)`,
-    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt]
-  );
+    source: options.source || API_KEY_SOURCES.MANUAL,
+    telegramUserId: options.telegramUserId || null,
+    scheduleMode: options.scheduleMode || API_KEY_SCHEDULE_MODES.NONE,
+    manualDisabled: options.manualDisabled === true,
+    createdAt: now.toISOString(),
+  }, now);
+  persistKey(db, apiKey);
   return apiKey;
+}
+
+export async function upsertTelegramApiKey({ telegramUserId, username, machineId, now = new Date() }) {
+  if (!telegramUserId) throw new Error("telegramUserId is required");
+  if (!username) throw new Error("username is required");
+  if (!machineId) throw new Error("machineId is required");
+
+  const db = await getAdapter();
+  let result = null;
+
+  db.transaction(() => {
+    const existingRow = db.get(`SELECT * FROM apiKeys WHERE telegramUserId = ?`, [String(telegramUserId)]);
+    if (existingRow) {
+      const merged = normalizePatch(rowToKey(existingRow), {
+        name: username,
+        source: API_KEY_SOURCES.TELEGRAM,
+        telegramUserId: String(telegramUserId),
+        scheduleMode: API_KEY_SCHEDULE_MODES.VN_BUSINESS_HOURS,
+      });
+      result = normalizeKeyRecord(merged, now);
+      persistKey(db, result);
+      return;
+    }
+
+    const generated = generateApiKeyWithMachine(machineId);
+    result = normalizeKeyRecord({
+      id: uuidv4(),
+      key: generated.key,
+      name: username,
+      machineId,
+      source: API_KEY_SOURCES.TELEGRAM,
+      telegramUserId: String(telegramUserId),
+      scheduleMode: API_KEY_SCHEDULE_MODES.VN_BUSINESS_HOURS,
+      manualDisabled: false,
+      createdAt: now.toISOString(),
+    }, now);
+    persistKey(db, result);
+  });
+
+  return result;
 }
 
 export async function updateApiKey(id, data) {
   const db = await getAdapter();
   let result = null;
+  const now = data?.now instanceof Date ? data.now : new Date();
+
   db.transaction(() => {
     const row = db.get(`SELECT * FROM apiKeys WHERE id = ?`, [id]);
     if (!row) return;
-    const merged = { ...rowToKey(row), ...data };
-    db.run(
-      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ? WHERE id = ?`,
-      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, id]
-    );
-    result = merged;
+    const merged = normalizePatch(rowToKey(row), data);
+    result = normalizeKeyRecord(merged, now);
+    persistKey(db, result);
   });
+
   return result;
 }
 
@@ -67,9 +186,46 @@ export async function deleteApiKey(id) {
   return (res?.changes ?? 0) > 0;
 }
 
+export async function reconcileTelegramApiKeySchedule(now = new Date()) {
+  const db = await getAdapter();
+  const rows = db.all(
+    `SELECT * FROM apiKeys WHERE scheduleMode = ?`,
+    [API_KEY_SCHEDULE_MODES.VN_BUSINESS_HOURS]
+  );
+
+  const changes = rows.flatMap((row) => {
+    const key = rowToKey(row);
+    const desired = computeApiKeyIsActive(key, now);
+    if (desired === key.isActive) return [];
+    return [{ ...key, isActive: desired, updatedAt: now.toISOString() }];
+  });
+
+  db.transaction(() => {
+    for (const key of changes) {
+      db.run(`UPDATE apiKeys SET isActive = ?, updatedAt = ? WHERE id = ?`, [
+        key.isActive ? 1 : 0,
+        key.updatedAt,
+        key.id,
+      ]);
+    }
+  });
+
+  return { total: rows.length, updated: changes.length };
+}
+
 export async function validateApiKey(key) {
   const db = await getAdapter();
-  const row = db.get(`SELECT isActive FROM apiKeys WHERE key = ?`, [key]);
+  const row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
   if (!row) return false;
-  return row.isActive === 1 || row.isActive === true;
+
+  const normalized = rowToKey(row);
+  const desired = computeApiKeyIsActive(normalized, new Date());
+  if (desired !== normalized.isActive) {
+    db.run(`UPDATE apiKeys SET isActive = ?, updatedAt = ? WHERE id = ?`, [
+      desired ? 1 : 0,
+      new Date().toISOString(),
+      normalized.id,
+    ]);
+  }
+  return desired;
 }

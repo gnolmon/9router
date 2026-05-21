@@ -53,6 +53,8 @@ describe("DB SQLite layer — public API parity", () => {
     expect(k.key).toMatch(/^sk-/);
     expect(k.machineId).toBe("machine-abc");
     expect(k.isActive).toBe(true);
+    expect(k.source).toBe("manual");
+    expect(k.scheduleMode).toBe("none");
 
     const all = await sqliteDb.getApiKeys();
     expect(all.find((x) => x.id === k.id)).toBeDefined();
@@ -63,6 +65,49 @@ describe("DB SQLite layer — public API parity", () => {
     const deleted = await sqliteDb.deleteApiKey(k.id);
     expect(deleted).toBe(true);
     expect(await sqliteDb.getApiKeyById(k.id)).toBeNull();
+  });
+
+  it("apiKeys: telegram keys reuse by telegramUserId and obey schedule/manual pause", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-05-22T01:30:00.000Z"));
+
+      const first = await sqliteDb.upsertTelegramApiKey({
+        telegramUserId: "42",
+        username: "alice",
+        machineId: "machine-abc",
+      });
+      expect(first.source).toBe("telegram");
+      expect(first.scheduleMode).toBe("vn-business-hours");
+      expect(first.isActive).toBe(true);
+
+      const second = await sqliteDb.upsertTelegramApiKey({
+        telegramUserId: "42",
+        username: "alice-renamed",
+        machineId: "machine-abc",
+      });
+      expect(second.id).toBe(first.id);
+      expect(second.key).toBe(first.key);
+      expect(second.name).toBe("alice-renamed");
+
+      const paused = await sqliteDb.updateApiKey(first.id, { isActive: false });
+      expect(paused.isActive).toBe(false);
+      expect(paused.manualDisabled).toBe(true);
+
+      const resumed = await sqliteDb.updateApiKey(first.id, { isActive: true });
+      expect(resumed.isActive).toBe(true);
+      expect(resumed.manualDisabled).toBe(false);
+
+      vi.setSystemTime(new Date("2026-05-22T12:30:00.000Z"));
+      const reconcile = await sqliteDb.reconcileTelegramApiKeySchedule();
+      expect(reconcile.total).toBeGreaterThanOrEqual(1);
+      expect(await sqliteDb.validateApiKey(first.key)).toBe(false);
+
+      const reloaded = await sqliteDb.getApiKeyById(first.id);
+      expect(reloaded.isActive).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("providerConnections: CRUD + reorder by priority", async () => {

@@ -137,12 +137,29 @@ console.log("3️⃣  Copying Next.js standalone build to app/cli/app...");
 const standaloneRoot = path.join(appDir, ".next", "standalone");
 const standaloneRootResolved = path.join(buildDistDir, "standalone");
 const standaloneRootToUse = fs.existsSync(standaloneRootResolved) ? standaloneRootResolved : standaloneRoot;
-const standaloneApp = fs.existsSync(path.join(standaloneRootToUse, "server.js"))
-  ? standaloneRootToUse
-  : path.join(standaloneRootToUse, "app");
-if (!fs.existsSync(standaloneApp)) {
+
+function resolveStandaloneApp(root) {
+  if (fs.existsSync(path.join(root, "server.js"))) return root;
+
+  const legacyAppRoot = path.join(root, "app");
+  if (fs.existsSync(path.join(legacyAppRoot, "server.js"))) return legacyAppRoot;
+
+  const nestedDirs = fs.existsSync(root)
+    ? fs.readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(root, entry.name))
+    : [];
+
+  const nestedServerRoot = nestedDirs.find((dir) => fs.existsSync(path.join(dir, "server.js")));
+  if (nestedServerRoot) return nestedServerRoot;
+
+  return legacyAppRoot;
+}
+
+const standaloneApp = resolveStandaloneApp(standaloneRootToUse);
+if (!fs.existsSync(standaloneApp) || !fs.existsSync(path.join(standaloneApp, "server.js"))) {
   console.error("❌ Next.js standalone build not found under .next/standalone");
-  console.error("Expected either .next/standalone/server.js or .next/standalone/app/");
+  console.error("Expected standalone/server.js, standalone/app/server.js, or standalone/<project>/server.js");
   process.exit(1);
 }
 copyRecursive(standaloneApp, cliAppDir);
@@ -183,6 +200,15 @@ const betterDir = path.join(cliAppDir, "node_modules", "better-sqlite3");
 if (fs.existsSync(betterDir)) {
   fs.rmSync(betterDir, { recursive: true, force: true });
   console.log("✅ Stripped better-sqlite3 (lives in ~/.9router/runtime)");
+}
+const bundledNodeModulesDir = path.join(cliAppDir, "node_modules");
+const packagedNodeModulesDir = path.join(cliAppDir, "runtime-node_modules");
+if (fs.existsSync(packagedNodeModulesDir)) {
+  fs.rmSync(packagedNodeModulesDir, { recursive: true, force: true });
+}
+if (fs.existsSync(bundledNodeModulesDir)) {
+  fs.renameSync(bundledNodeModulesDir, packagedNodeModulesDir);
+  console.log("✅ Moved traced node_modules to runtime-node_modules for npm packing");
 }
 console.log("");
 

@@ -473,6 +473,7 @@ function openBrowser(url) {
 // Find standalone server (bundled in bin/app for published package)
 const standaloneDir = path.join(__dirname, "app");
 const serverPath = path.join(standaloneDir, "server.js");
+const standaloneRuntimeModulesDir = path.join(standaloneDir, "runtime-node_modules");
 
 if (!fs.existsSync(serverPath)) {
   console.error("Error: Standalone build not found.");
@@ -557,6 +558,7 @@ function startServer(latestVersion) {
       windowsHide: true,
       env: {
         ...buildEnvWithRuntime(process.env),
+        NODE_PATH: [standaloneRuntimeModulesDir, process.env.NODE_PATH].filter(Boolean).join(path.delimiter),
         PORT: port.toString(),
         HOSTNAME: host
       }

@@ -1,0 +1,171 @@
+import { makeKv } from "@/lib/db/helpers/kvStore.js";
+import { upsertTelegramApiKey } from "@/lib/localDb";
+import { getConsistentMachineId } from "@/shared/utils/machineId";
+import { VIETNAM_TIMEZONE } from "@/lib/apiKeys/schedule.js";
+import { TELEGRAM_API_BASE_URL, getTelegramPollTimeoutSeconds } from "./config.js";
+
+const KEY_COMMAND_RE = /^\/key(?:@\w+)?(?:\s|$)/i;
+const botKv = makeKv("telegramBot");
+
+const g = global.__telegramBotRuntime ??= {
+  started: false,
+  startPromise: null,
+  pollTimer: null,
+  polling: false,
+};
+
+function scheduleNextPoll(delayMs = 0) {
+  if (g.pollTimer) clearTimeout(g.pollTimer);
+  g.pollTimer = setTimeout(() => {
+    pollUpdates().catch((error) => {
+      console.log(`[Telegram] Poll crash: ${error.message}`);
+      scheduleNextPoll(5000);
+    });
+  }, delayMs);
+  if (g.pollTimer.unref) g.pollTimer.unref();
+}
+
+async function callTelegram(method, body, timeoutMs) {
+  const response = await fetch(`${TELEGRAM_API_BASE_URL}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) {
+    throw new Error(`${method} HTTP ${response.status}`);
+  }
+  const payload = await response.json();
+  if (!payload?.ok) {
+    throw new Error(payload?.description || `${method} failed`);
+  }
+  return payload;
+}
+
+function buildKeyReply(apiKey, username) {
+  const lines = [
+    `9Router API key for @${username}:`,
+    apiKey.key,
+    "",
+    `Status: ${apiKey.isActive ? "ACTIVE" : "DISABLED"}`,
+    `Hours: 08:00-18:30 ${VIETNAM_TIMEZONE}`,
+  ];
+  if (!apiKey.isActive) {
+    lines.push(`This key will activate again at 08:00 ${VIETNAM_TIMEZONE}.`);
+  }
+  lines.push("You can pause or delete this key later from the dashboard.");
+  return lines.join("\n");
+}
+
+async function sendMessage(chatId, text, replyToMessageId) {
+  await callTelegram("sendMessage", {
+    chat_id: chatId,
+    text,
+    reply_to_message_id: replyToMessageId,
+    allow_sending_without_reply: true,
+  }, 15000);
+}
+
+function extractCommand(text) {
+  if (typeof text !== "string") return null;
+  const normalized = text.trim();
+  if (KEY_COMMAND_RE.test(normalized)) return "key";
+  return null;
+}
+
+async function processKeyCommand(message) {
+  const user = message?.from;
+  if (!user?.id) return null;
+
+  const username = String(user.username || "").trim();
+  if (!username) {
+    return "Please set a Telegram username first, then send /key again.";
+  }
+
+  const machineId = await getConsistentMachineId();
+  const apiKey = await upsertTelegramApiKey({
+    telegramUserId: String(user.id),
+    username,
+    machineId,
+  });
+  return buildKeyReply(apiKey, username);
+}
+
+async function handleUpdate(update) {
+  const message = update?.message;
+  const chatId = message?.chat?.id;
+  if (!message || !chatId) return;
+
+  const command = extractCommand(message.text);
+  if (command !== "key") return;
+
+  const reply = await processKeyCommand(message);
+  if (!reply) return;
+
+  try {
+    await sendMessage(chatId, reply, message.message_id);
+  } catch (error) {
+    console.log(`[Telegram] sendMessage failed: ${error.message}`);
+  }
+}
+
+async function pollUpdates() {
+  if (g.polling) return;
+  g.polling = true;
+  let nextDelayMs = 0;
+
+  try {
+    const timeoutSeconds = getTelegramPollTimeoutSeconds();
+    const offset = Number(await botKv.get("lastUpdateId", 0)) || 0;
+    const payload = await callTelegram("getUpdates", {
+      offset,
+      timeout: timeoutSeconds,
+      allowed_updates: ["message"],
+    }, (timeoutSeconds + 10) * 1000);
+
+    const updates = Array.isArray(payload?.result) ? payload.result : [];
+    let nextOffset = offset;
+
+    for (const update of updates) {
+      const updateId = Number(update?.update_id) || 0;
+      if (updateId > 0) nextOffset = Math.max(nextOffset, updateId + 1);
+      try {
+        await handleUpdate(update);
+      } catch (error) {
+        console.log(`[Telegram] update ${updateId || "unknown"} failed: ${error.message}`);
+      }
+    }
+
+    if (nextOffset !== offset) {
+      await botKv.set("lastUpdateId", nextOffset);
+    }
+  } catch (error) {
+    nextDelayMs = 5000;
+    console.log(`[Telegram] Poll failed: ${error.message}`);
+  } finally {
+    g.polling = false;
+    scheduleNextPoll(nextDelayMs);
+  }
+}
+
+export async function ensureTelegramBotStarted() {
+  if (g.startPromise) return g.startPromise;
+  g.startPromise = (async () => {
+    if (g.started) return;
+    g.started = true;
+    console.log("[Telegram] Bot polling started");
+    scheduleNextPoll(0);
+  })().catch((error) => {
+    g.started = false;
+    g.startPromise = null;
+    throw error;
+  });
+  return g.startPromise;
+}
+
+export const __test__ = {
+  buildKeyReply,
+  extractCommand,
+  processKeyCommand,
+};
+

@@ -2,8 +2,11 @@
 *
 !cli.js
 !hooks/
+!hooks/**
+!src/
+!src/**
 !app/
+!app/**
 !package.json
 !README.md
 !LICENSE
-

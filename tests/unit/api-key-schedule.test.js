@@ -1,0 +1,37 @@
+import { describe, it, expect } from "vitest";
+import {
+  API_KEY_SCHEDULE_MODES,
+  computeApiKeyIsActive,
+  getNextVietnamScheduleTransition,
+  isVietnamBusinessHours,
+} from "@/lib/apiKeys/schedule.js";
+
+describe("API key schedule", () => {
+  it("treats 08:00-18:29 Vietnam time as active", () => {
+    expect(isVietnamBusinessHours(new Date("2026-05-22T01:00:00.000Z"))).toBe(true);
+    expect(isVietnamBusinessHours(new Date("2026-05-22T11:29:59.000Z"))).toBe(true);
+  });
+
+  it("treats before 08:00 and from 18:30 as inactive", () => {
+    expect(isVietnamBusinessHours(new Date("2026-05-22T00:59:59.000Z"))).toBe(false);
+    expect(isVietnamBusinessHours(new Date("2026-05-22T11:30:00.000Z"))).toBe(false);
+  });
+
+  it("lets manual disable override schedule", () => {
+    const key = {
+      scheduleMode: API_KEY_SCHEDULE_MODES.VN_BUSINESS_HOURS,
+      manualDisabled: true,
+    };
+    expect(computeApiKeyIsActive(key, new Date("2026-05-22T01:30:00.000Z"))).toBe(false);
+  });
+
+  it("computes next schedule transition in Vietnam time", () => {
+    expect(getNextVietnamScheduleTransition(new Date("2026-05-22T00:00:00.000Z")).toISOString())
+      .toBe("2026-05-22T01:00:00.000Z");
+    expect(getNextVietnamScheduleTransition(new Date("2026-05-22T01:30:00.000Z")).toISOString())
+      .toBe("2026-05-22T11:30:00.000Z");
+    expect(getNextVietnamScheduleTransition(new Date("2026-05-22T12:00:00.000Z")).toISOString())
+      .toBe("2026-05-23T01:00:00.000Z");
+  });
+});
+

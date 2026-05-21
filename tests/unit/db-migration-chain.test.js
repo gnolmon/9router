@@ -37,6 +37,14 @@ describe("Schema migrations", () => {
       "_meta", "settings", "providerConnections", "providerNodes",
       "proxyPools", "apiKeys", "combos", "kv", "usageHistory", "usageDaily", "requestDetails",
     ]));
+
+    const apiKeyColumns = db.all(`PRAGMA table_info(apiKeys)`).map((c) => c.name);
+    expect(apiKeyColumns).toEqual(expect.arrayContaining([
+      "source", "telegramUserId", "scheduleMode", "updatedAt", "manualDisabled",
+    ]));
+
+    const apiKeyIndexes = db.all(`PRAGMA index_list(apiKeys)`).map((i) => i.name);
+    expect(apiKeyIndexes).toContain("idx_ak_telegram_user_id");
   });
 
   it("existing DB at older schemaVersion → re-applies pending migrations on restart", async () => {

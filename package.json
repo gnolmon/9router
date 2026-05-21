@@ -1,15 +1,38 @@
 {
-  "name": "9router-app",
+  "name": "@smt/9router",
   "version": "0.4.59",
   "description": "9Router web dashboard",
-  "private": true,
+  "private": false,
+  "bin": {
+    "9router": "./cli/cli.js"
+  },
+  "files": [
+    ".env.example",
+    "LICENSE",
+    "README.md",
+    "cli/LICENSE",
+    "cli/README.md",
+    "cli/cli.js",
+    "cli/src",
+    "cli/package.json",
+    "cli/hooks",
+    "cli/app/server.js",
+    "cli/app/package.json",
+    "cli/app/.next-cli-build",
+    "cli/app/public",
+    "cli/app/src",
+    "cli/app/runtime-node_modules"
+  ],
   "scripts": {
     "dev": "next dev --webpack --port 20128",
     "build": "next build --webpack",
     "start": "next start",
     "dev:bun": "bun --bun next dev --webpack --port 20128",
     "build:bun": "bun --bun next build --webpack",
-    "start:bun": "bun ./.next/standalone/server.js"
+    "start:bun": "bun ./.next/standalone/server.js",
+    "prepare": "node scripts/prepare-github-install.js",
+    "prepack": "node cli/scripts/build-cli.js",
+    "pack:github": "npm pack"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -20,6 +43,7 @@
     "@xyflow/react": "^12.10.1",
     "bcryptjs": "^3.0.3",
     "confbox": "^0.2.4",
+    "esbuild": "^0.25.12",
     "express": "^5.2.1",
     "fs": "^0.0.1-security",
     "http-proxy-middleware": "^3.0.5",
@@ -53,5 +77,8 @@
     "eslint-config-next": "16.1.6",
     "postcss": "^8.5.6",
     "tailwindcss": "^4"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

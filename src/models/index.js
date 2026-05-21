@@ -31,8 +31,11 @@ export {
   getMitmAlias,
   setMitmAliasAll,
   getApiKeys,
+  getApiKeyByTelegramUserId,
   createApiKey,
+  upsertTelegramApiKey,
   deleteApiKey,
+  reconcileTelegramApiKeySchedule,
   validateApiKey,
   isCloudEnabled,
 } from "@/lib/localDb";

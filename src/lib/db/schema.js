@@ -1,5 +1,5 @@
 // Latest schema version — bumped when a migration is added in ./migrations/
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -78,9 +78,19 @@ export const TABLES = {
       name: "TEXT",
       machineId: "TEXT",
       isActive: "INTEGER DEFAULT 1",
+      source: "TEXT DEFAULT 'manual'",
+      telegramUserId: "TEXT",
+      scheduleMode: "TEXT DEFAULT 'none'",
+      updatedAt: "TEXT",
+      manualDisabled: "INTEGER DEFAULT 0",
       createdAt: "TEXT NOT NULL",
     },
-    indexes: ["CREATE INDEX IF NOT EXISTS idx_ak_key ON apiKeys(key)"],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS idx_ak_key ON apiKeys(key)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_ak_telegram_user_id ON apiKeys(telegramUserId) WHERE telegramUserId IS NOT NULL",
+      "CREATE INDEX IF NOT EXISTS idx_ak_schedule_mode ON apiKeys(scheduleMode)",
+      "CREATE INDEX IF NOT EXISTS idx_ak_source ON apiKeys(source)",
+    ],
   },
   combos: {
     columns: {

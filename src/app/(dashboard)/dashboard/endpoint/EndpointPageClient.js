@@ -730,7 +730,8 @@ export default function APIPageClient({ machineId }) {
         body: JSON.stringify({ isActive }),
       });
       if (res.ok) {
-        setKeys(prev => prev.map(k => k.id === id ? { ...k, isActive } : k));
+        const data = await res.json();
+        setKeys(prev => prev.map(k => k.id === id ? { ...k, ...(data.key || {}), id } : k));
       }
     } catch (error) {
       console.log("Error toggling key:", error);
