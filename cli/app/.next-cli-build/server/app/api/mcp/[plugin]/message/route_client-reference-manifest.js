@@ -1,0 +1,1 @@
+globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/mcp/[plugin]/message/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"/Users/longdz/workspace/9router/src/app/api/mcp/[plugin]/message/route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}};
