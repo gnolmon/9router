@@ -4,7 +4,7 @@
   "description": "9Router web dashboard",
   "private": false,
   "bin": {
-    "9router": "./cli/cli.js"
+    "9router": "./cli/app/src/cli-entry.js"
   },
   "files": [
     ".env.example",
