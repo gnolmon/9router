@@ -1,6 +1,6 @@
 {
   "name": "@smt/9router",
-  "version": "0.4.61",
+  "version": "0.4.62",
   "description": "9Router web dashboard",
   "private": false,
   "bin": {
@@ -10,18 +10,7 @@
     ".env.example",
     "LICENSE",
     "README.md",
-    "cli/LICENSE",
-    "cli/README.md",
-    "cli/cli.js",
-    "cli/src",
-    "cli/package.json",
-    "cli/hooks",
-    "cli/app/server.js",
-    "cli/app/package.json",
-    "cli/app/.next-cli-build",
-    "cli/app/public",
-    "cli/app/src",
-    "cli/app/runtime-node_modules"
+    "cli"
   ],
   "scripts": {
     "dev": "next dev --webpack --port 20128",
