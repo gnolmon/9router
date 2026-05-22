@@ -21,8 +21,24 @@ function formatInteger(value) {
   return Number(value || 0).toLocaleString("en-US");
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 function formatSharePercentage(value) {
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatUsd(value) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return "0$";
+
+  const precision = amount >= 100 ? 0 : amount >= 1 ? 2 : 4;
+  const formatted = amount.toFixed(precision).replace(/\.?0+$/, "");
+  return `${formatted}$`;
 }
 
 function isEmail(value) {
@@ -154,22 +170,22 @@ async function getQuotaSnapshot(now = new Date()) {
 
 function buildQuotaLine(snapshot) {
   if (!snapshot.lowest.length) {
-    return "Quota now: unavailable";
+    return "<b>Quota now</b>: unavailable";
   }
 
   if (snapshot.lowest.length === 1) {
     const item = snapshot.lowest[0];
-    return `Quota now: ${item.remaining}% (${item.quotaName}, reset ${item.resetIn})`;
+    return `<b>Quota now</b>: ${item.remaining}% (${escapeHtml(item.quotaName)}, reset ${escapeHtml(item.resetIn)})`;
   }
 
   return [
-    "Quota now:",
-    ...snapshot.lowest.map((item) => `- ${item.label}: ${item.remaining}% (${item.quotaName}, reset ${item.resetIn})`),
+    "<b>Quota now</b>:",
+    ...snapshot.lowest.map((item) => `- ${escapeHtml(item.label)}: ${item.remaining}% (${escapeHtml(item.quotaName)}, reset ${escapeHtml(item.resetIn)})`),
   ].join("\n");
 }
 
 function buildUsageLines(summary) {
-  const lines = [`Key usage (${summary.period}):`];
+  const lines = [`<b>Key usage (${escapeHtml(summary.period)})</b>:`];
 
   if (!summary.items.length) {
     lines.push("No Telegram-key usage.");
@@ -177,8 +193,8 @@ function buildUsageLines(summary) {
   }
 
   for (const item of summary.items) {
-    const name = item.name || item.telegramUserId || "unknown";
-    lines.push(`${name}: ${formatInteger(item.totalTokens)} tokens - ${formatSharePercentage(item.share)}`);
+    const name = escapeHtml(item.name || item.telegramUserId || "unknown");
+    lines.push(`${name}: ${formatInteger(item.totalTokens)} tokens - ${formatSharePercentage(item.share)} - ${formatUsd(item.cost)}`);
   }
 
   return lines;
@@ -202,7 +218,9 @@ export const __test__ = {
   TOP_LOW_QUOTAS_LIMIT,
   buildQuotaLine,
   buildUsageLines,
+  escapeHtml,
   formatSharePercentage,
+  formatUsd,
   getQuotaStatus,
   getQuotaSnapshot,
   resetQuotaCache() {

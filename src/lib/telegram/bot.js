@@ -100,6 +100,16 @@ async function sendMessage(chatId, text, replyToMessageId) {
   }, 15000);
 }
 
+async function sendHtmlMessage(chatId, text, replyToMessageId) {
+  await callTelegram("sendMessage", {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    reply_to_message_id: replyToMessageId,
+    allow_sending_without_reply: true,
+  }, 15000);
+}
+
 function extractCommand(text) {
   if (typeof text !== "string") return null;
   const normalized = text.trim();
@@ -157,7 +167,11 @@ async function handleUpdate(update) {
   if (!reply) return;
 
   try {
-    await sendMessage(chatId, reply, message.message_id);
+    if (command === "report" || command === "report7") {
+      await sendHtmlMessage(chatId, reply, message.message_id);
+    } else {
+      await sendMessage(chatId, reply, message.message_id);
+    }
   } catch (error) {
     console.log(`[Telegram] sendMessage failed: ${error.message}`);
   }
@@ -224,5 +238,6 @@ export const __test__ = {
   processCommand,
   processKeyCommand,
   processReportCommand,
+  sendHtmlMessage,
   syncTelegramCommands,
 };

@@ -367,13 +367,14 @@ export async function getTelegramUsageShareSummary(period = "today", now = new D
 
   const keyMap = new Map(telegramKeys.map((key) => [key.key, key]));
   const rows = db.all(
-    `SELECT timestamp, apiKey, promptTokens, completionTokens, tokens
+    `SELECT timestamp, apiKey, promptTokens, completionTokens, cost, tokens
      FROM usageHistory
      WHERE timestamp >= ? AND timestamp <= ? AND apiKey IS NOT NULL`,
     [window.start.toISOString(), window.end.toISOString()]
   );
 
   const usageMap = new Map();
+  let totalCost = 0;
   let totalTokens = 0;
   let totalRequests = 0;
 
@@ -385,6 +386,7 @@ export async function getTelegramUsageShareSummary(period = "today", now = new D
     const tokenTotal = promptTokens + completionTokens;
     if (tokenTotal <= 0) continue;
 
+    totalCost += row.cost || 0;
     totalTokens += tokenTotal;
     totalRequests += 1;
 
@@ -392,6 +394,7 @@ export async function getTelegramUsageShareSummary(period = "today", now = new D
       apiKey: row.apiKey,
       name: keyInfo.name || null,
       telegramUserId: keyInfo.telegramUserId || null,
+      cost: 0,
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
@@ -399,6 +402,7 @@ export async function getTelegramUsageShareSummary(period = "today", now = new D
       lastUsed: row.timestamp,
     };
 
+    existing.cost += row.cost || 0;
     existing.promptTokens += promptTokens;
     existing.completionTokens += completionTokens;
     existing.totalTokens += tokenTotal;
@@ -431,6 +435,7 @@ export async function getTelegramUsageShareSummary(period = "today", now = new D
     totalTelegramKeys: telegramKeys.length,
     keysWithUsage: items.length,
     totalRequests,
+    totalCost,
     totalTokens,
     items,
   };

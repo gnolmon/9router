@@ -52,9 +52,11 @@ describe("telegram report builder", () => {
       windowEndLabel: "2026-05-22 09:30:00 Asia/Ho_Chi_Minh",
       totalTelegramKeys: 12,
       keysWithUsage: 11,
+      totalCost: 12.3456,
       totalRequests: 42,
       totalTokens: 1000,
       items: Array.from({ length: 11 }, (_, index) => ({
+        cost: index === 0 ? 3.14159 : 0.1234,
         name: `user${index + 1}`,
         telegramUserId: String(index + 1),
         totalTokens: index === 0 ? 300 : 70,
@@ -63,16 +65,16 @@ describe("telegram report builder", () => {
     });
   });
 
-  it("builds a plain-text report with quota and usage sections", async () => {
+  it("builds an HTML-safe report with bold quota and usage headings", async () => {
     const { buildTelegramReport } = await loadReportModule();
     const report = await buildTelegramReport("today", new Date("2026-05-22T02:30:00.000Z"));
 
-    expect(report).toContain("Quota now:");
+    expect(report).toContain("<b>Quota now</b>:");
     expect(report).toContain("- github / alice@example.com: 5%");
     expect(report).toContain("- codex / Workspace A: 50%");
-    expect(report).toContain("Key usage (Today):");
-    expect(report).toContain("user1: 300 tokens - 30.0%");
-    expect(report).toContain("user11: 70 tokens - 7.0%");
+    expect(report).toContain("<b>Key usage (Today)</b>:");
+    expect(report).toContain("user1: 300 tokens - 30.0% - 3.14$");
+    expect(report).toContain("user11: 70 tokens - 7.0% - 0.1234$");
     expect(report).not.toContain("As of:");
     expect(report).not.toContain("Window:");
   });
@@ -83,6 +85,15 @@ describe("telegram report builder", () => {
     mocks.getProviderConnections.mockResolvedValue([
       { id: "c1", provider: "github", name: "alice@example.com", authType: "oauth", isActive: true },
     ]);
+    mocks.getTelegramUsageShareSummary.mockResolvedValue({
+      period: "Today",
+      totalCost: 0,
+      totalTelegramKeys: 1,
+      keysWithUsage: 0,
+      totalRequests: 0,
+      totalTokens: 0,
+      items: [],
+    });
     mocks.fetchUsageForConnection.mockImplementationOnce(() => new Promise((resolve) => {
       resolveFetch = resolve;
     }));
@@ -112,6 +123,6 @@ describe("telegram report builder", () => {
       lowest: [
         { remaining: 57, quotaName: "weekly", resetIn: "4d 15h 7m" },
       ],
-    })).toBe("Quota now: 57% (weekly, reset 4d 15h 7m)");
+    })).toBe("<b>Quota now</b>: 57% (weekly, reset 4d 15h 7m)");
   });
 });

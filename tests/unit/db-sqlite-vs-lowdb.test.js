@@ -316,6 +316,7 @@ describe("DB SQLite layer — public API parity", () => {
 
       const todaySummary = await sqliteDb.getTelegramUsageShareSummary("today", now);
       expect(todaySummary.totalTokens).toBe(450);
+      expect(todaySummary.totalCost).toBeGreaterThanOrEqual(0);
       expect(todaySummary.keysWithUsage).toBe(2);
       expect(todaySummary.items[0].name).toBe("bob");
       expect(todaySummary.items[0].totalTokens).toBe(300);

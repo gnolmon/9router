@@ -114,4 +114,19 @@ describe("telegram bot helpers", () => {
     const { __test__ } = await loadBotModule();
     await expect(__test__.syncTelegramCommands()).resolves.toBeUndefined();
   });
+
+  it("sends report replies using HTML parse mode", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, result: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { __test__ } = await loadBotModule();
+    await __test__.sendHtmlMessage(123, "<b>Quota now</b>: 56%", 456);
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.parse_mode).toBe("HTML");
+    expect(body.text).toContain("<b>Quota now</b>");
+  });
 });
