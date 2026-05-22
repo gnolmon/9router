@@ -4,7 +4,7 @@
   "description": "9Router web dashboard",
   "private": false,
   "bin": {
-    "9router": "./cli/app/src/bin/9router.js"
+    "9router": "./cli/app/src/lib/updater/9router.js"
   },
   "files": [
     ".env.example",
@@ -15,7 +15,7 @@
   "scripts": {
     "dev": "next dev --webpack --port 20128",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "node scripts/start-standalone.js",
     "dev:bun": "bun --bun next dev --webpack --port 20128",
     "build:bun": "bun --bun next build --webpack",
     "start:bun": "bun ./.next/standalone/server.js",
