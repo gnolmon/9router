@@ -17,6 +17,8 @@ const TOP_LOW_QUOTAS_LIMIT = 5;
 const WORKWEEK_DAYS = 5;
 const WORKDAY_BURN_PERCENT = 100 / WORKWEEK_DAYS;
 const QUOTA_BUFFER_PERCENT = 10;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const BUSINESS_START_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 const g = global.__telegramReportRuntime ??= {
   quotaSnapshot: null,
@@ -69,16 +71,19 @@ function isWeeklyQuota(quotaName) {
   return typeof quotaName === "string" && quotaName.toLowerCase().includes("week");
 }
 
-function countVietnamBusinessDaysUntil(resetAt, now = new Date()) {
+function countFutureVietnamBusinessDays(resetAt, now = new Date()) {
   const resetDate = resetAt instanceof Date ? resetAt : new Date(resetAt);
   if (Number.isNaN(resetDate.getTime()) || resetDate <= now) return 0;
 
   let count = 0;
-  let cursor = getVietnamStartOfDay(now);
+  let cursor = new Date(getVietnamStartOfDay(now).getTime() + DAY_MS);
 
   while (cursor < resetDate) {
-    if (isVietnamBusinessWeekday(cursor)) count += 1;
-    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+    if (isVietnamBusinessWeekday(cursor)) {
+      const businessStart = new Date(cursor.getTime() + BUSINESS_START_OFFSET_MS);
+      if (businessStart < resetDate) count += 1;
+    }
+    cursor = new Date(cursor.getTime() + DAY_MS);
   }
 
   return count;
@@ -86,28 +91,20 @@ function countVietnamBusinessDaysUntil(resetAt, now = new Date()) {
 
 function getAdjustedWorkdayQuotaRemaining(rawRemaining, quotaName, resetAt, now = new Date()) {
   if (!Number.isFinite(rawRemaining) || !isWeeklyQuota(quotaName)) {
-    return { remaining: rawRemaining, note: null };
+    return { remaining: rawRemaining, isAdjusted: false };
   }
 
   if (!isVietnamBusinessWeekday(now)) {
-    return { remaining: 0, note: `${QUOTA_BUFFER_PERCENT}% buffer` };
+    return { remaining: 0, isAdjusted: true };
   }
 
-  const workdaysRemaining = countVietnamBusinessDaysUntil(resetAt, now);
-  if (workdaysRemaining <= 0) {
-    return { remaining: 0, note: `${QUOTA_BUFFER_PERCENT}% buffer` };
-  }
+  const futureWorkdays = countFutureVietnamBusinessDays(resetAt, now);
+  const requiredFloor = Math.min(100, futureWorkdays * WORKDAY_BURN_PERCENT);
+  const todayBudgetRemaining = ((rawRemaining - requiredFloor) / WORKDAY_BURN_PERCENT) * 100;
+  const clampedTodayBudgetRemaining = Math.max(0, Math.min(100, todayBudgetRemaining));
+  const bufferedRemaining = Math.max(0, Math.round(clampedTodayBudgetRemaining - QUOTA_BUFFER_PERCENT));
 
-  const dayStartRemaining = Math.min(100, workdaysRemaining * WORKDAY_BURN_PERCENT);
-  const dayEndRemaining = Math.max(0, dayStartRemaining - WORKDAY_BURN_PERCENT);
-  const dayBudgetRemaining = Math.round(((rawRemaining - dayEndRemaining) / WORKDAY_BURN_PERCENT) * 100);
-  const clampedDayBudgetRemaining = Math.max(0, Math.min(100, dayBudgetRemaining));
-  const bufferedRemaining = Math.max(0, clampedDayBudgetRemaining - QUOTA_BUFFER_PERCENT);
-
-  return {
-    remaining: bufferedRemaining,
-    note: `${QUOTA_BUFFER_PERCENT}% buffer`,
-  };
+  return { remaining: bufferedRemaining, isAdjusted: true };
 }
 
 function summarizeQuotaConnection(connection, data, error = null, now = new Date()) {
@@ -167,7 +164,7 @@ function summarizeQuotaConnection(connection, data, error = null, now = new Date
     quotaName: lowestQuota.name || "quota",
     resetAt: lowestQuota.resetAt || null,
     resetIn: formatResetTime(lowestQuota.resetAt),
-    note: adjustedQuota.note,
+    isAdjusted: adjustedQuota.isAdjusted,
     message: data?.message || null,
   };
 }
@@ -235,8 +232,8 @@ function buildQuotaLine(snapshot) {
 
   if (snapshot.lowest.length === 1) {
     const item = snapshot.lowest[0];
-    if (item.note) {
-      return `<b>Quota now</b>: ${item.remaining}% (${escapeHtml(item.note)})`;
+    if (item.isAdjusted) {
+      return `<b>Quota now</b>: ${item.remaining}%`;
     }
     return `<b>Quota now</b>: ${item.remaining}% (${escapeHtml(item.quotaName)}, reset ${escapeHtml(item.resetIn)})`;
   }
@@ -244,8 +241,8 @@ function buildQuotaLine(snapshot) {
   return [
     "<b>Quota now</b>:",
     ...snapshot.lowest.map((item) => (
-      item.note
-        ? `- ${escapeHtml(item.label)}: ${item.remaining}% (${escapeHtml(item.note)})`
+      item.isAdjusted
+        ? `- ${escapeHtml(item.label)}: ${item.remaining}%`
         : `- ${escapeHtml(item.label)}: ${item.remaining}% (${escapeHtml(item.quotaName)}, reset ${escapeHtml(item.resetIn)})`
     )),
   ].join("\n");
@@ -291,7 +288,7 @@ export const __test__ = {
   getQuotaStatus,
   getQuotaSnapshot,
   getAdjustedWorkdayQuotaRemaining,
-  countVietnamBusinessDaysUntil,
+  countFutureVietnamBusinessDays,
   isWeeklyQuota,
   resetQuotaCache() {
     g.quotaSnapshot = null;

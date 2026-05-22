@@ -128,23 +128,28 @@ describe("telegram report builder", () => {
 
   it("adjusts weekly quota by remaining workday budget and buffer", async () => {
     const { __test__ } = await loadReportModule();
+    expect(__test__.countFutureVietnamBusinessDays(
+      "2026-05-27T01:14:00.000Z",
+      new Date("2026-05-22T09:30:00.000Z"),
+    )).toBe(2);
+
     expect(__test__.getAdjustedWorkdayQuotaRemaining(
       52,
       "weekly",
-      "2026-05-26T19:14:00.000Z",
-      new Date("2026-05-22T10:30:00.000Z"),
+      "2026-05-27T01:14:00.000Z",
+      new Date("2026-05-22T09:30:00.000Z"),
     )).toEqual({
       remaining: 50,
-      note: "10% buffer",
+      isAdjusted: true,
     });
   });
 
-  it("shows buffered workday quota line for weekly quotas", async () => {
+  it("shows adjusted workday quota line without buffer explanation", async () => {
     const { __test__ } = await loadReportModule();
     expect(__test__.buildQuotaLine({
       lowest: [
-        { remaining: 50, quotaName: "weekly", note: "10% buffer" },
+        { remaining: 50, quotaName: "weekly", isAdjusted: true },
       ],
-    })).toBe("<b>Quota now</b>: 50% (10% buffer)");
+    })).toBe("<b>Quota now</b>: 50%");
   });
 });
