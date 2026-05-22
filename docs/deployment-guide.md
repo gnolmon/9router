@@ -130,6 +130,7 @@ Notes:
 - Telegram bot supports `/key`, `/report`, and `/report7`
 - Telegram-managed API keys are active only on Monday-Friday, `08:00-18:30` in `Asia/Ho_Chi_Minh`
 - `/report` and `/report7` show `Quota Remaining Today` for weekly quotas as the current workday burn budget remaining after excluding future weekend days; a fixed `10%` safety buffer is deducted silently
+- On Saturday and Sunday in Vietnam time, `/key`, `/report`, and `/report7` reply with a short weekend rest greeting instead of returning a key or report
 - `/key` still requires the sender to have a Telegram `username`; `/report` and `/report7` do not
 - Telegram clients that support bot command menus will show `/key`, `/report`, and `/report7` from the native slash-command menu
 

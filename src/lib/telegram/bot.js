@@ -1,7 +1,7 @@
 import { makeKv } from "@/lib/db/helpers/kvStore.js";
 import { upsertTelegramApiKey } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
-import { VIETNAM_TIMEZONE } from "@/lib/apiKeys/schedule.js";
+import { VIETNAM_TIMEZONE, isVietnamBusinessWeekday } from "@/lib/apiKeys/schedule.js";
 import { TELEGRAM_API_BASE_URL, getTelegramPollTimeoutSeconds } from "./config.js";
 import { buildTelegramReport } from "./report.js";
 
@@ -15,6 +15,7 @@ const COMMAND_PATTERNS = [
   ["report7", /^\/report7(?:@\w+)?(?:\s|$)/i],
   ["report", /^\/report(?:@\w+)?(?:\s|$)/i],
 ];
+const WEEKEND_REPLY = "Cuoi tuan roi, chuc ban nghi ngoi thoai mai va vui ve nhe!";
 const botKv = makeKv("telegramBot");
 
 const g = global.__telegramBotRuntime ??= {
@@ -142,7 +143,15 @@ async function processReportCommand(period, message) {
   return buildTelegramReport(period);
 }
 
-async function processCommand(command, message) {
+function shouldBlockForWeekend(command, now = new Date()) {
+  return ["key", "report", "report7"].includes(command) && !isVietnamBusinessWeekday(now);
+}
+
+async function processCommand(command, message, now = new Date()) {
+  if (shouldBlockForWeekend(command, now)) {
+    return WEEKEND_REPLY;
+  }
+
   switch (command) {
     case "key":
       return processKeyCommand(message);
@@ -240,4 +249,6 @@ export const __test__ = {
   processReportCommand,
   sendHtmlMessage,
   syncTelegramCommands,
+  shouldBlockForWeekend,
+  WEEKEND_REPLY,
 };

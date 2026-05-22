@@ -88,6 +88,24 @@ describe("telegram bot helpers", () => {
     expect(mocks.buildTelegramReport).toHaveBeenNthCalledWith(2, "7d");
   });
 
+  it("returns a weekend greeting for /key, /report, and /report7 on Saturday or Sunday", async () => {
+    const { __test__ } = await loadBotModule();
+    const saturday = new Date("2026-05-23T03:00:00.000Z");
+
+    await expect(__test__.processCommand("key", {
+      from: { id: 42, username: "alice" },
+    }, saturday)).resolves.toBe(__test__.WEEKEND_REPLY);
+    await expect(__test__.processCommand("report", {
+      from: { id: 42 },
+    }, saturday)).resolves.toBe(__test__.WEEKEND_REPLY);
+    await expect(__test__.processCommand("report7", {
+      from: { id: 42 },
+    }, saturday)).resolves.toBe(__test__.WEEKEND_REPLY);
+
+    expect(mocks.upsertTelegramApiKey).not.toHaveBeenCalled();
+    expect(mocks.buildTelegramReport).not.toHaveBeenCalled();
+  });
+
   it("syncs Telegram command metadata only once per process", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
