@@ -126,7 +126,10 @@ Notes:
 - Tunnel and MITM features may need extra OS-level permissions or installed binaries
 - Some provider integrations depend on OAuth or cookie sessions that may be unstable or risky
 - Telegram bot polling is single-instance only when packaging this build, because the bot token is embedded in the artifact
-- Telegram `/key` works from private chats and group chats that have a real `from.id` and `from.username`
+- Telegram commands work from private chats and group chats that have a real `from.id`
+- Telegram bot supports `/key`, `/report`, and `/report7`
+- `/key` still requires the sender to have a Telegram `username`; `/report` and `/report7` do not
+- Telegram clients that support bot command menus will show `/key`, `/report`, and `/report7` from the native slash-command menu
 
 ## Recommended Deployment Checks
 

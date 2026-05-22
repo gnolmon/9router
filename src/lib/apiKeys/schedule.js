@@ -26,6 +26,30 @@ export function getVietnamLocalParts(now = new Date()) {
   };
 }
 
+export function getVietnamDateKey(now = new Date()) {
+  const parts = getVietnamLocalParts(now);
+  return `${parts.year}-${String(parts.month + 1).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+export function getVietnamStartOfDay(now = new Date(), daysBack = 0) {
+  const parts = getVietnamLocalParts(now);
+  const shiftedUtcMs = Date.UTC(
+    parts.year,
+    parts.month,
+    parts.day - daysBack,
+    0,
+    0,
+    0,
+    0
+  );
+  return new Date(shiftedUtcMs - VIETNAM_OFFSET_MS);
+}
+
+export function formatVietnamDateTime(now = new Date()) {
+  const parts = getVietnamLocalParts(now);
+  return `${parts.year}-${String(parts.month + 1).padStart(2, "0")}-${String(parts.day).padStart(2, "0")} ${String(parts.hours).padStart(2, "0")}:${String(parts.minutes).padStart(2, "0")}:${String(parts.seconds).padStart(2, "0")} ${VIETNAM_TIMEZONE}`;
+}
+
 export function isVietnamBusinessHours(now = new Date()) {
   const { hours, minutes } = getVietnamLocalParts(now);
   const totalMinutes = hours * 60 + minutes;
@@ -77,4 +101,3 @@ export function getNextVietnamScheduleTransition(now = new Date()) {
   const actualUtcMs = shiftedUtcMs - VIETNAM_OFFSET_MS;
   return new Date(actualUtcMs);
 }
-

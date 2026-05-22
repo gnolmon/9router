@@ -3,11 +3,23 @@ import { upsertTelegramApiKey } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { VIETNAM_TIMEZONE } from "@/lib/apiKeys/schedule.js";
 import { TELEGRAM_API_BASE_URL, getTelegramPollTimeoutSeconds } from "./config.js";
+import { buildTelegramReport } from "./report.js";
 
-const KEY_COMMAND_RE = /^\/key(?:@\w+)?(?:\s|$)/i;
+const TELEGRAM_COMMANDS = [
+  { command: "key", description: "Get or reuse your 9Router API key" },
+  { command: "report", description: "Current quota + Telegram usage today" },
+  { command: "report7", description: "Current quota + Telegram usage 7D" },
+];
+const COMMAND_PATTERNS = [
+  ["key", /^\/key(?:@\w+)?(?:\s|$)/i],
+  ["report7", /^\/report7(?:@\w+)?(?:\s|$)/i],
+  ["report", /^\/report(?:@\w+)?(?:\s|$)/i],
+];
 const botKv = makeKv("telegramBot");
 
 const g = global.__telegramBotRuntime ??= {
+  commandsSynced: false,
+  commandsSyncPromise: null,
   started: false,
   startPromise: null,
   pollTimer: null,
@@ -42,6 +54,28 @@ async function callTelegram(method, body, timeoutMs) {
   return payload;
 }
 
+async function syncTelegramCommands() {
+  if (g.commandsSynced) return;
+  if (g.commandsSyncPromise) return g.commandsSyncPromise;
+
+  g.commandsSyncPromise = (async () => {
+    try {
+      await callTelegram("setMyCommands", {
+        commands: TELEGRAM_COMMANDS,
+      }, 15000);
+      await callTelegram("setChatMenuButton", {
+        menu_button: { type: "commands" },
+      }, 15000);
+      g.commandsSynced = true;
+      console.log("[Telegram] Command menu synced");
+    } catch (error) {
+      console.log(`[Telegram] Command sync failed: ${error.message}`);
+    }
+  })();
+
+  return g.commandsSyncPromise;
+}
+
 function buildKeyReply(apiKey, username) {
   const lines = [
     `9Router API key for @${username}:`,
@@ -69,7 +103,9 @@ async function sendMessage(chatId, text, replyToMessageId) {
 function extractCommand(text) {
   if (typeof text !== "string") return null;
   const normalized = text.trim();
-  if (KEY_COMMAND_RE.test(normalized)) return "key";
+  for (const [command, pattern] of COMMAND_PATTERNS) {
+    if (pattern.test(normalized)) return command;
+  }
   return null;
 }
 
@@ -91,15 +127,33 @@ async function processKeyCommand(message) {
   return buildKeyReply(apiKey, username);
 }
 
+async function processReportCommand(period, message) {
+  if (!message?.from?.id) return null;
+  return buildTelegramReport(period);
+}
+
+async function processCommand(command, message) {
+  switch (command) {
+    case "key":
+      return processKeyCommand(message);
+    case "report":
+      return processReportCommand("today", message);
+    case "report7":
+      return processReportCommand("7d", message);
+    default:
+      return null;
+  }
+}
+
 async function handleUpdate(update) {
   const message = update?.message;
   const chatId = message?.chat?.id;
   if (!message || !chatId) return;
 
   const command = extractCommand(message.text);
-  if (command !== "key") return;
+  if (!command) return;
 
-  const reply = await processKeyCommand(message);
+  const reply = await processCommand(command, message);
   if (!reply) return;
 
   try {
@@ -153,6 +207,7 @@ export async function ensureTelegramBotStarted() {
   g.startPromise = (async () => {
     if (g.started) return;
     g.started = true;
+    await syncTelegramCommands();
     console.log("[Telegram] Bot polling started");
     scheduleNextPoll(0);
   })().catch((error) => {
@@ -166,6 +221,8 @@ export async function ensureTelegramBotStarted() {
 export const __test__ = {
   buildKeyReply,
   extractCommand,
+  processCommand,
   processKeyCommand,
+  processReportCommand,
+  syncTelegramCommands,
 };
-

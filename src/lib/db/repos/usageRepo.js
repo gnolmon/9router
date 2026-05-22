@@ -2,6 +2,12 @@ import { EventEmitter } from "events";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 import { getMeta, setMeta } from "../helpers/metaStore.js";
+import {
+  API_KEY_SOURCES,
+  VIETNAM_TIMEZONE,
+  formatVietnamDateTime,
+  getVietnamStartOfDay,
+} from "@/lib/apiKeys/schedule.js";
 
 const PENDING_TIMEOUT_MS = 60 * 1000;
 const RING_CAP = 50;
@@ -314,6 +320,120 @@ function loadDaysInRange(adapter, maxDays) {
   const cutoff = new Date(today.getFullYear(), today.getMonth(), today.getDate() - maxDays + 1);
   const cutoffKey = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
   return adapter.all(`SELECT dateKey, data FROM usageDaily WHERE dateKey >= ?`, [cutoffKey]);
+}
+
+function getTokenCountsFromHistoryRow(row) {
+  if (typeof row.promptTokens === "number" || typeof row.completionTokens === "number") {
+    return {
+      promptTokens: row.promptTokens || 0,
+      completionTokens: row.completionTokens || 0,
+    };
+  }
+
+  const tokens = parseJson(row.tokens, {}) || {};
+  return {
+    promptTokens: tokens.prompt_tokens || tokens.input_tokens || 0,
+    completionTokens: tokens.completion_tokens || tokens.output_tokens || 0,
+  };
+}
+
+function getTelegramUsageWindow(period = "today", now = new Date()) {
+  if (period === "7d") {
+    return {
+      label: "7D",
+      start: getVietnamStartOfDay(now, 6),
+      end: now,
+    };
+  }
+
+  return {
+    label: "Today",
+    start: getVietnamStartOfDay(now, 0),
+    end: now,
+  };
+}
+
+export async function getTelegramUsageShareSummary(period = "today", now = new Date()) {
+  const db = await getAdapter();
+  const { getApiKeys } = await import("./apiKeysRepo.js");
+
+  const window = getTelegramUsageWindow(period, now);
+  const allApiKeys = await getApiKeys();
+  const telegramKeys = allApiKeys.filter((key) => (
+    key.source === API_KEY_SOURCES.TELEGRAM &&
+    typeof key.key === "string" &&
+    key.key.length > 0
+  ));
+
+  const keyMap = new Map(telegramKeys.map((key) => [key.key, key]));
+  const rows = db.all(
+    `SELECT timestamp, apiKey, promptTokens, completionTokens, tokens
+     FROM usageHistory
+     WHERE timestamp >= ? AND timestamp <= ? AND apiKey IS NOT NULL`,
+    [window.start.toISOString(), window.end.toISOString()]
+  );
+
+  const usageMap = new Map();
+  let totalTokens = 0;
+  let totalRequests = 0;
+
+  for (const row of rows) {
+    const keyInfo = keyMap.get(row.apiKey);
+    if (!keyInfo) continue;
+
+    const { promptTokens, completionTokens } = getTokenCountsFromHistoryRow(row);
+    const tokenTotal = promptTokens + completionTokens;
+    if (tokenTotal <= 0) continue;
+
+    totalTokens += tokenTotal;
+    totalRequests += 1;
+
+    const existing = usageMap.get(row.apiKey) || {
+      apiKey: row.apiKey,
+      name: keyInfo.name || null,
+      telegramUserId: keyInfo.telegramUserId || null,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      requests: 0,
+      lastUsed: row.timestamp,
+    };
+
+    existing.promptTokens += promptTokens;
+    existing.completionTokens += completionTokens;
+    existing.totalTokens += tokenTotal;
+    existing.requests += 1;
+    if (new Date(row.timestamp) > new Date(existing.lastUsed)) {
+      existing.lastUsed = row.timestamp;
+    }
+
+    usageMap.set(row.apiKey, existing);
+  }
+
+  const items = [...usageMap.values()]
+    .sort((a, b) => (
+      b.totalTokens - a.totalTokens ||
+      new Date(b.lastUsed) - new Date(a.lastUsed) ||
+      String(a.name || "").localeCompare(String(b.name || ""))
+    ))
+    .map((item) => ({
+      ...item,
+      share: totalTokens > 0 ? item.totalTokens / totalTokens : 0,
+    }));
+
+  return {
+    period: window.label,
+    timezone: VIETNAM_TIMEZONE,
+    windowStart: window.start.toISOString(),
+    windowEnd: window.end.toISOString(),
+    windowStartLabel: formatVietnamDateTime(window.start),
+    windowEndLabel: formatVietnamDateTime(window.end),
+    totalTelegramKeys: telegramKeys.length,
+    keysWithUsage: items.length,
+    totalRequests,
+    totalTokens,
+    items,
+  };
 }
 
 export async function getUsageStats(period = "all") {

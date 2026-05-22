@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   API_KEY_SCHEDULE_MODES,
   computeApiKeyIsActive,
+  formatVietnamDateTime,
+  getVietnamDateKey,
+  getVietnamStartOfDay,
   getNextVietnamScheduleTransition,
   isVietnamBusinessHours,
 } from "@/lib/apiKeys/schedule.js";
@@ -33,5 +36,16 @@ describe("API key schedule", () => {
     expect(getNextVietnamScheduleTransition(new Date("2026-05-22T12:00:00.000Z")).toISOString())
       .toBe("2026-05-23T01:00:00.000Z");
   });
-});
 
+  it("computes Vietnam date keys and start-of-day boundaries", () => {
+    const now = new Date("2026-05-22T17:45:30.000Z");
+    expect(getVietnamDateKey(now)).toBe("2026-05-23");
+    expect(getVietnamStartOfDay(now).toISOString()).toBe("2026-05-22T17:00:00.000Z");
+    expect(getVietnamStartOfDay(now, 6).toISOString()).toBe("2026-05-16T17:00:00.000Z");
+  });
+
+  it("formats Vietnam timestamps in plain text", () => {
+    expect(formatVietnamDateTime(new Date("2026-05-22T01:05:09.000Z")))
+      .toBe("2026-05-22 08:05:09 Asia/Ho_Chi_Minh");
+  });
+});

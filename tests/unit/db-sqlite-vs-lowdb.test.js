@@ -246,6 +246,93 @@ describe("DB SQLite layer — public API parity", () => {
     expect(stats.byProvider.openai.promptTokens).toBeGreaterThanOrEqual(300);
   });
 
+  it("usage: telegram usage summary respects Vietnam day windows and excludes manual keys", async () => {
+    vi.useFakeTimers();
+    try {
+      const now = new Date("2026-05-22T03:00:00.000Z");
+      vi.setSystemTime(now);
+
+      const manualKey = await sqliteDb.createApiKey("manual", "machine-manual");
+      const telegramA = await sqliteDb.upsertTelegramApiKey({
+        telegramUserId: "100",
+        username: "alice",
+        machineId: "machine-abc",
+        now,
+      });
+      const telegramB = await sqliteDb.upsertTelegramApiKey({
+        telegramUserId: "101",
+        username: "bob",
+        machineId: "machine-def",
+        now,
+      });
+
+      await sqliteDb.saveRequestUsage({
+        timestamp: "2026-05-18T03:00:00.000Z",
+        provider: "openai",
+        model: "gpt-4",
+        apiKey: telegramA.key,
+        tokens: { prompt_tokens: 50, completion_tokens: 50 },
+        status: "ok",
+      });
+      await sqliteDb.saveRequestUsage({
+        timestamp: "2026-05-21T16:59:59.000Z",
+        provider: "openai",
+        model: "gpt-4",
+        apiKey: telegramA.key,
+        tokens: { prompt_tokens: 999, completion_tokens: 1 },
+        status: "ok",
+      });
+      await sqliteDb.saveRequestUsage({
+        timestamp: "2026-05-21T17:00:00.000Z",
+        provider: "openai",
+        model: "gpt-4",
+        apiKey: telegramA.key,
+        tokens: { prompt_tokens: 100, completion_tokens: 50 },
+        status: "ok",
+      });
+      await sqliteDb.saveRequestUsage({
+        timestamp: "2026-05-22T02:00:00.000Z",
+        provider: "openai",
+        model: "gpt-4",
+        apiKey: telegramB.key,
+        tokens: { prompt_tokens: 200, completion_tokens: 100 },
+        status: "ok",
+      });
+      await sqliteDb.saveRequestUsage({
+        timestamp: "2026-05-22T02:10:00.000Z",
+        provider: "openai",
+        model: "gpt-4",
+        apiKey: manualKey.key,
+        tokens: { prompt_tokens: 500, completion_tokens: 500 },
+        status: "ok",
+      });
+      await sqliteDb.saveRequestUsage({
+        timestamp: "2026-05-22T02:20:00.000Z",
+        provider: "openai",
+        model: "gpt-4",
+        tokens: { prompt_tokens: 500, completion_tokens: 500 },
+        status: "ok",
+      });
+
+      const todaySummary = await sqliteDb.getTelegramUsageShareSummary("today", now);
+      expect(todaySummary.totalTokens).toBe(450);
+      expect(todaySummary.keysWithUsage).toBe(2);
+      expect(todaySummary.items[0].name).toBe("bob");
+      expect(todaySummary.items[0].totalTokens).toBe(300);
+      expect(todaySummary.items[1].name).toBe("alice");
+      expect(todaySummary.items[1].totalTokens).toBe(150);
+
+      const weekSummary = await sqliteDb.getTelegramUsageShareSummary("7d", now);
+      expect(weekSummary.totalTokens).toBe(1550);
+      expect(weekSummary.keysWithUsage).toBe(2);
+      expect(weekSummary.items[0].name).toBe("alice");
+      expect(weekSummary.items[0].totalTokens).toBe(1250);
+      expect(weekSummary.items[1].name).toBe("bob");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("usage: pending tracking in-memory", () => {
     sqliteDb.trackPendingRequest("gpt-4", "openai", "c1", true);
     expect(global._pendingRequests.byModel["gpt-4 (openai)"]).toBe(1);
