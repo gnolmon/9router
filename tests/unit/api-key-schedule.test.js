@@ -7,6 +7,7 @@ import {
   getVietnamStartOfDay,
   getNextVietnamScheduleTransition,
   isVietnamBusinessHours,
+  isVietnamBusinessWeekday,
 } from "@/lib/apiKeys/schedule.js";
 
 describe("API key schedule", () => {
@@ -18,6 +19,12 @@ describe("API key schedule", () => {
   it("treats before 08:00 and from 18:30 as inactive", () => {
     expect(isVietnamBusinessHours(new Date("2026-05-22T00:59:59.000Z"))).toBe(false);
     expect(isVietnamBusinessHours(new Date("2026-05-22T11:30:00.000Z"))).toBe(false);
+  });
+
+  it("treats Saturday and Sunday as inactive all day", () => {
+    expect(isVietnamBusinessWeekday(new Date("2026-05-23T03:00:00.000Z"))).toBe(false);
+    expect(isVietnamBusinessHours(new Date("2026-05-23T03:00:00.000Z"))).toBe(false);
+    expect(isVietnamBusinessHours(new Date("2026-05-24T08:00:00.000Z"))).toBe(false);
   });
 
   it("lets manual disable override schedule", () => {
@@ -34,7 +41,11 @@ describe("API key schedule", () => {
     expect(getNextVietnamScheduleTransition(new Date("2026-05-22T01:30:00.000Z")).toISOString())
       .toBe("2026-05-22T11:30:00.000Z");
     expect(getNextVietnamScheduleTransition(new Date("2026-05-22T12:00:00.000Z")).toISOString())
-      .toBe("2026-05-23T01:00:00.000Z");
+      .toBe("2026-05-25T01:00:00.000Z");
+    expect(getNextVietnamScheduleTransition(new Date("2026-05-23T03:00:00.000Z")).toISOString())
+      .toBe("2026-05-25T01:00:00.000Z");
+    expect(getNextVietnamScheduleTransition(new Date("2026-05-24T12:00:00.000Z")).toISOString())
+      .toBe("2026-05-25T01:00:00.000Z");
   });
 
   it("computes Vietnam date keys and start-of-day boundaries", () => {

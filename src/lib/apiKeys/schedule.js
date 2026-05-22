@@ -20,6 +20,7 @@ export function getVietnamLocalParts(now = new Date()) {
     year: shifted.getUTCFullYear(),
     month: shifted.getUTCMonth(),
     day: shifted.getUTCDate(),
+    dayOfWeek: shifted.getUTCDay(),
     hours: shifted.getUTCHours(),
     minutes: shifted.getUTCMinutes(),
     seconds: shifted.getUTCSeconds(),
@@ -50,8 +51,27 @@ export function formatVietnamDateTime(now = new Date()) {
   return `${parts.year}-${String(parts.month + 1).padStart(2, "0")}-${String(parts.day).padStart(2, "0")} ${String(parts.hours).padStart(2, "0")}:${String(parts.minutes).padStart(2, "0")}:${String(parts.seconds).padStart(2, "0")} ${VIETNAM_TIMEZONE}`;
 }
 
+export function isVietnamBusinessWeekday(now = new Date()) {
+  const { dayOfWeek } = getVietnamLocalParts(now);
+  return dayOfWeek >= 1 && dayOfWeek <= 5;
+}
+
+function buildVietnamDate(parts, dayOffset, hours, minutes) {
+  const shiftedUtcMs = Date.UTC(
+    parts.year,
+    parts.month,
+    parts.day + dayOffset,
+    hours,
+    minutes,
+    0,
+    0
+  );
+  return new Date(shiftedUtcMs - VIETNAM_OFFSET_MS);
+}
+
 export function isVietnamBusinessHours(now = new Date()) {
   const { hours, minutes } = getVietnamLocalParts(now);
+  if (!isVietnamBusinessWeekday(now)) return false;
   const totalMinutes = hours * 60 + minutes;
   return totalMinutes >= ACTIVE_START_MINUTES && totalMinutes < ACTIVE_END_MINUTES;
 }
@@ -73,31 +93,18 @@ export function computeApiKeyIsActive(apiKey, now = new Date()) {
 export function getNextVietnamScheduleTransition(now = new Date()) {
   const parts = getVietnamLocalParts(now);
   const totalMinutes = parts.hours * 60 + parts.minutes;
-  let targetHour = 8;
-  let targetMinute = 0;
-  let dayOffset = 0;
+  const isWeekday = parts.dayOfWeek >= 1 && parts.dayOfWeek <= 5;
 
-  if (totalMinutes < ACTIVE_START_MINUTES) {
-    targetHour = 8;
-    targetMinute = 0;
-  } else if (totalMinutes < ACTIVE_END_MINUTES) {
-    targetHour = 18;
-    targetMinute = 30;
-  } else {
-    targetHour = 8;
-    targetMinute = 0;
-    dayOffset = 1;
+  if (isWeekday && totalMinutes >= ACTIVE_START_MINUTES && totalMinutes < ACTIVE_END_MINUTES) {
+    return buildVietnamDate(parts, 0, 18, 30);
   }
 
-  const shiftedUtcMs = Date.UTC(
-    parts.year,
-    parts.month,
-    parts.day + dayOffset,
-    targetHour,
-    targetMinute,
-    0,
-    0
-  );
-  const actualUtcMs = shiftedUtcMs - VIETNAM_OFFSET_MS;
-  return new Date(actualUtcMs);
+  let dayOffset = isWeekday && totalMinutes < ACTIVE_START_MINUTES ? 0 : 1;
+  while (true) {
+    const candidate = buildVietnamDate(parts, dayOffset, 0, 0);
+    if (isVietnamBusinessWeekday(candidate)) {
+      return buildVietnamDate(parts, dayOffset, 8, 0);
+    }
+    dayOffset += 1;
+  }
 }

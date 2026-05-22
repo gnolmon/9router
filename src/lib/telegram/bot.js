@@ -82,10 +82,10 @@ function buildKeyReply(apiKey, username) {
     apiKey.key,
     "",
     `Status: ${apiKey.isActive ? "ACTIVE" : "DISABLED"}`,
-    `Hours: 08:00-18:30 ${VIETNAM_TIMEZONE}`,
+    `Hours: Mon-Fri 08:00-18:30 ${VIETNAM_TIMEZONE}`,
   ];
   if (!apiKey.isActive) {
-    lines.push(`This key will activate again at 08:00 ${VIETNAM_TIMEZONE}.`);
+    lines.push(`This key will activate again at 08:00 ${VIETNAM_TIMEZONE} on the next business day.`);
   }
   lines.push("You can pause or delete this key later from the dashboard.");
   return lines.join("\n");
