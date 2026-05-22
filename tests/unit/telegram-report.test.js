@@ -67,14 +67,14 @@ describe("telegram report builder", () => {
     const { buildTelegramReport } = await loadReportModule();
     const report = await buildTelegramReport("today", new Date("2026-05-22T02:30:00.000Z"));
 
-    expect(report).toContain("9Router report Today");
-    expect(report).toContain("Quota now");
-    expect(report).toContain("Tracked: 3 active connections");
-    expect(report).toContain("Status: 1 ok | 0 low | 1 depleted | 1 unavailable");
+    expect(report).toContain("Quota now:");
     expect(report).toContain("- github / alice@example.com: 5%");
-    expect(report).toContain("Telegram key usage (Today)");
-    expect(report).toContain("- @user1: 30.0% (300 tokens)");
-    expect(report).toContain("- Others: 7.0% (70 tokens)");
+    expect(report).toContain("- codex / Workspace A: 50%");
+    expect(report).toContain("Key usage (Today):");
+    expect(report).toContain("user1: 300 tokens - 30.0%");
+    expect(report).toContain("user11: 70 tokens - 7.0%");
+    expect(report).not.toContain("As of:");
+    expect(report).not.toContain("Window:");
   });
 
   it("coalesces concurrent quota snapshot fetches", async () => {
@@ -104,5 +104,14 @@ describe("telegram report builder", () => {
 
     expect(mocks.fetchUsageForConnection).toHaveBeenCalledTimes(1);
     expect(mocks.getTelegramUsageShareSummary).toHaveBeenCalledTimes(2);
+  });
+
+  it("formats single-account quota as one compact line", async () => {
+    const { __test__ } = await loadReportModule();
+    expect(__test__.buildQuotaLine({
+      lowest: [
+        { remaining: 57, quotaName: "weekly", resetIn: "4d 15h 7m" },
+      ],
+    })).toBe("Quota now: 57% (weekly, reset 4d 15h 7m)");
   });
 });

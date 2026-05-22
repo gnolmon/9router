@@ -1,4 +1,3 @@
-import { formatVietnamDateTime } from "@/lib/apiKeys/schedule.js";
 import { getProviderConnections, getTelegramUsageShareSummary } from "@/lib/localDb";
 import { fetchUsageForConnection, isUsageEligibleConnection } from "@/lib/usage/connectionUsage.js";
 import {
@@ -11,7 +10,6 @@ const QUOTA_CACHE_TTL_MS = 5 * 60 * 1000;
 const QUOTA_LOW_THRESHOLD = 30;
 const QUOTA_DEPLETED_THRESHOLD = 5;
 const TOP_LOW_QUOTAS_LIMIT = 5;
-const TOP_USAGE_KEYS_LIMIT = 10;
 
 const g = global.__telegramReportRuntime ??= {
   quotaSnapshot: null,
@@ -125,8 +123,6 @@ async function loadQuotaSnapshot(now = new Date()) {
     .slice(0, TOP_LOW_QUOTAS_LIMIT);
 
   return {
-    generatedAt: now.toISOString(),
-    generatedAtLabel: formatVietnamDateTime(now),
     totalTracked: connections.length,
     counts,
     lowest,
@@ -156,54 +152,33 @@ async function getQuotaSnapshot(now = new Date()) {
   return g.quotaSnapshotPromise;
 }
 
-function buildQuotaLines(snapshot) {
-  const lines = [
-    "Quota now",
-    `Tracked: ${snapshot.totalTracked} active connections`,
-    `Status: ${snapshot.counts.ok} ok | ${snapshot.counts.low} low | ${snapshot.counts.depleted} depleted | ${snapshot.counts.unavailable} unavailable`,
-  ];
-
+function buildQuotaLine(snapshot) {
   if (!snapshot.lowest.length) {
-    lines.push("Lowest remaining: none");
-    return lines;
+    return "Quota now: unavailable";
   }
 
-  lines.push("Lowest remaining:");
-  for (const item of snapshot.lowest) {
-    lines.push(`- ${item.label}: ${item.remaining}% (${item.quotaName}, reset ${item.resetIn})`);
+  if (snapshot.lowest.length === 1) {
+    const item = snapshot.lowest[0];
+    return `Quota now: ${item.remaining}% (${item.quotaName}, reset ${item.resetIn})`;
   }
-  return lines;
+
+  return [
+    "Quota now:",
+    ...snapshot.lowest.map((item) => `- ${item.label}: ${item.remaining}% (${item.quotaName}, reset ${item.resetIn})`),
+  ].join("\n");
 }
 
 function buildUsageLines(summary) {
-  const lines = [
-    `Telegram key usage (${summary.period})`,
-    `Window: ${summary.windowStartLabel} -> ${summary.windowEndLabel}`,
-    `Total: ${formatInteger(summary.totalTokens)} tokens | Keys: ${summary.keysWithUsage}/${summary.totalTelegramKeys} | Requests: ${formatInteger(summary.totalRequests)}`,
-  ];
+  const lines = [`Key usage (${summary.period}):`];
 
   if (!summary.items.length) {
     lines.push("No Telegram-key usage.");
     return lines;
   }
 
-  let otherTokens = 0;
-  let otherShare = 0;
-  const topItems = summary.items.slice(0, TOP_USAGE_KEYS_LIMIT);
-  const otherItems = summary.items.slice(TOP_USAGE_KEYS_LIMIT);
-
-  for (const item of otherItems) {
-    otherTokens += item.totalTokens;
-    otherShare += item.share;
-  }
-
-  for (const item of topItems) {
-    const name = item.name ? `@${item.name}` : `user ${item.telegramUserId || "unknown"}`;
-    lines.push(`- ${name}: ${formatSharePercentage(item.share)} (${formatInteger(item.totalTokens)} tokens)`);
-  }
-
-  if (otherItems.length > 0) {
-    lines.push(`- Others: ${formatSharePercentage(otherShare)} (${formatInteger(otherTokens)} tokens)`);
+  for (const item of summary.items) {
+    const name = item.name || item.telegramUserId || "unknown";
+    lines.push(`${name}: ${formatInteger(item.totalTokens)} tokens - ${formatSharePercentage(item.share)}`);
   }
 
   return lines;
@@ -216,10 +191,7 @@ export async function buildTelegramReport(period = "today", now = new Date()) {
   ]);
 
   return [
-    `9Router report ${period === "7d" ? "7D" : "Today"}`,
-    `As of: ${formatVietnamDateTime(now)}`,
-    "",
-    ...buildQuotaLines(quotaSnapshot),
+    buildQuotaLine(quotaSnapshot),
     "",
     ...buildUsageLines(usageSummary),
   ].join("\n");
@@ -228,8 +200,7 @@ export async function buildTelegramReport(period = "today", now = new Date()) {
 export const __test__ = {
   QUOTA_CACHE_TTL_MS,
   TOP_LOW_QUOTAS_LIMIT,
-  TOP_USAGE_KEYS_LIMIT,
-  buildQuotaLines,
+  buildQuotaLine,
   buildUsageLines,
   formatSharePercentage,
   getQuotaStatus,
