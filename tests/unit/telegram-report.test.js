@@ -69,7 +69,7 @@ describe("telegram report builder", () => {
     const { buildTelegramReport } = await loadReportModule();
     const report = await buildTelegramReport("today", new Date("2026-05-22T02:30:00.000Z"));
 
-    expect(report).toContain("<b>Quota now</b>:");
+    expect(report).toContain("<b>Quota Remaining Today</b>:");
     expect(report).toContain("- github / alice@example.com: 5%");
     expect(report).toContain("- codex / Workspace A: 50%");
     expect(report).toContain("<b>Key usage (Today)</b>:");
@@ -123,7 +123,7 @@ describe("telegram report builder", () => {
       lowest: [
         { remaining: 57, quotaName: "weekly", resetIn: "4d 15h 7m" },
       ],
-    })).toBe("<b>Quota now</b>: 57% (weekly, reset 4d 15h 7m)");
+    })).toBe("<b>Quota Remaining Today</b>: 57% (weekly, reset 4d 15h 7m)");
   });
 
   it("adjusts weekly quota by remaining workday budget and buffer", async () => {
@@ -150,6 +150,6 @@ describe("telegram report builder", () => {
       lowest: [
         { remaining: 50, quotaName: "weekly", isAdjusted: true },
       ],
-    })).toBe("<b>Quota now</b>: 50%");
+    })).toBe("<b>Quota Remaining Today</b>: 50%");
   });
 });

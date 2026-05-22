@@ -123,10 +123,10 @@ describe("telegram bot helpers", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { __test__ } = await loadBotModule();
-    await __test__.sendHtmlMessage(123, "<b>Quota now</b>: 56%", 456);
+    await __test__.sendHtmlMessage(123, "<b>Quota Remaining Today</b>: 56%", 456);
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.parse_mode).toBe("HTML");
-    expect(body.text).toContain("<b>Quota now</b>");
+    expect(body.text).toContain("<b>Quota Remaining Today</b>");
   });
 });

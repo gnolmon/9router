@@ -227,19 +227,19 @@ async function getQuotaSnapshot(now = new Date()) {
 
 function buildQuotaLine(snapshot) {
   if (!snapshot.lowest.length) {
-    return "<b>Quota now</b>: unavailable";
+    return "<b>Quota Remaining Today</b>: unavailable";
   }
 
   if (snapshot.lowest.length === 1) {
     const item = snapshot.lowest[0];
     if (item.isAdjusted) {
-      return `<b>Quota now</b>: ${item.remaining}%`;
+      return `<b>Quota Remaining Today</b>: ${item.remaining}%`;
     }
-    return `<b>Quota now</b>: ${item.remaining}% (${escapeHtml(item.quotaName)}, reset ${escapeHtml(item.resetIn)})`;
+    return `<b>Quota Remaining Today</b>: ${item.remaining}% (${escapeHtml(item.quotaName)}, reset ${escapeHtml(item.resetIn)})`;
   }
 
   return [
-    "<b>Quota now</b>:",
+    "<b>Quota Remaining Today</b>:",
     ...snapshot.lowest.map((item) => (
       item.isAdjusted
         ? `- ${escapeHtml(item.label)}: ${item.remaining}%`
