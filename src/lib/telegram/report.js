@@ -1,4 +1,8 @@
 import { getProviderConnections, getTelegramUsageShareSummary } from "@/lib/localDb";
+import {
+  getVietnamStartOfDay,
+  isVietnamBusinessWeekday,
+} from "@/lib/apiKeys/schedule.js";
 import { fetchUsageForConnection, isUsageEligibleConnection } from "@/lib/usage/connectionUsage.js";
 import {
   formatResetTime,
@@ -10,6 +14,9 @@ const QUOTA_CACHE_TTL_MS = 5 * 60 * 1000;
 const QUOTA_LOW_THRESHOLD = 30;
 const QUOTA_DEPLETED_THRESHOLD = 5;
 const TOP_LOW_QUOTAS_LIMIT = 5;
+const WORKWEEK_DAYS = 5;
+const WORKDAY_BURN_PERCENT = 100 / WORKWEEK_DAYS;
+const QUOTA_BUFFER_PERCENT = 10;
 
 const g = global.__telegramReportRuntime ??= {
   quotaSnapshot: null,
@@ -58,7 +65,52 @@ function getQuotaStatus(remaining) {
   return "ok";
 }
 
-function summarizeQuotaConnection(connection, data, error = null) {
+function isWeeklyQuota(quotaName) {
+  return typeof quotaName === "string" && quotaName.toLowerCase().includes("week");
+}
+
+function countVietnamBusinessDaysUntil(resetAt, now = new Date()) {
+  const resetDate = resetAt instanceof Date ? resetAt : new Date(resetAt);
+  if (Number.isNaN(resetDate.getTime()) || resetDate <= now) return 0;
+
+  let count = 0;
+  let cursor = getVietnamStartOfDay(now);
+
+  while (cursor < resetDate) {
+    if (isVietnamBusinessWeekday(cursor)) count += 1;
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  return count;
+}
+
+function getAdjustedWorkdayQuotaRemaining(rawRemaining, quotaName, resetAt, now = new Date()) {
+  if (!Number.isFinite(rawRemaining) || !isWeeklyQuota(quotaName)) {
+    return { remaining: rawRemaining, note: null };
+  }
+
+  if (!isVietnamBusinessWeekday(now)) {
+    return { remaining: 0, note: `${QUOTA_BUFFER_PERCENT}% buffer` };
+  }
+
+  const workdaysRemaining = countVietnamBusinessDaysUntil(resetAt, now);
+  if (workdaysRemaining <= 0) {
+    return { remaining: 0, note: `${QUOTA_BUFFER_PERCENT}% buffer` };
+  }
+
+  const dayStartRemaining = Math.min(100, workdaysRemaining * WORKDAY_BURN_PERCENT);
+  const dayEndRemaining = Math.max(0, dayStartRemaining - WORKDAY_BURN_PERCENT);
+  const dayBudgetRemaining = Math.round(((rawRemaining - dayEndRemaining) / WORKDAY_BURN_PERCENT) * 100);
+  const clampedDayBudgetRemaining = Math.max(0, Math.min(100, dayBudgetRemaining));
+  const bufferedRemaining = Math.max(0, clampedDayBudgetRemaining - QUOTA_BUFFER_PERCENT);
+
+  return {
+    remaining: bufferedRemaining,
+    note: `${QUOTA_BUFFER_PERCENT}% buffer`,
+  };
+}
+
+function summarizeQuotaConnection(connection, data, error = null, now = new Date()) {
   if (error) {
     return {
       connectionId: connection.id,
@@ -98,16 +150,24 @@ function summarizeQuotaConnection(connection, data, error = null) {
     a.remaining - b.remaining ||
     String(a.name || "").localeCompare(String(b.name || ""))
   ))[0];
+  const adjustedQuota = getAdjustedWorkdayQuotaRemaining(
+    lowestQuota.remaining,
+    lowestQuota.name,
+    lowestQuota.resetAt,
+    now,
+  );
 
   return {
     connectionId: connection.id,
     provider: connection.provider,
     label: `${connection.provider} / ${getConnectionLabel(connection)}`,
-    status: getQuotaStatus(lowestQuota.remaining),
-    remaining: lowestQuota.remaining,
+    status: getQuotaStatus(adjustedQuota.remaining),
+    remaining: adjustedQuota.remaining,
+    rawRemaining: lowestQuota.remaining,
     quotaName: lowestQuota.name || "quota",
     resetAt: lowestQuota.resetAt || null,
     resetIn: formatResetTime(lowestQuota.resetAt),
+    note: adjustedQuota.note,
     message: data?.message || null,
   };
 }
@@ -119,9 +179,9 @@ async function loadQuotaSnapshot(now = new Date()) {
   const results = await Promise.all(connections.map(async (connection) => {
     try {
       const usage = await fetchUsageForConnection(connection);
-      return summarizeQuotaConnection(connection, usage);
+      return summarizeQuotaConnection(connection, usage, null, now);
     } catch (error) {
-      return summarizeQuotaConnection(connection, null, error);
+      return summarizeQuotaConnection(connection, null, error, now);
     }
   }));
 
@@ -175,12 +235,19 @@ function buildQuotaLine(snapshot) {
 
   if (snapshot.lowest.length === 1) {
     const item = snapshot.lowest[0];
+    if (item.note) {
+      return `<b>Quota now</b>: ${item.remaining}% (${escapeHtml(item.note)})`;
+    }
     return `<b>Quota now</b>: ${item.remaining}% (${escapeHtml(item.quotaName)}, reset ${escapeHtml(item.resetIn)})`;
   }
 
   return [
     "<b>Quota now</b>:",
-    ...snapshot.lowest.map((item) => `- ${escapeHtml(item.label)}: ${item.remaining}% (${escapeHtml(item.quotaName)}, reset ${escapeHtml(item.resetIn)})`),
+    ...snapshot.lowest.map((item) => (
+      item.note
+        ? `- ${escapeHtml(item.label)}: ${item.remaining}% (${escapeHtml(item.note)})`
+        : `- ${escapeHtml(item.label)}: ${item.remaining}% (${escapeHtml(item.quotaName)}, reset ${escapeHtml(item.resetIn)})`
+    )),
   ].join("\n");
 }
 
@@ -223,6 +290,9 @@ export const __test__ = {
   formatUsd,
   getQuotaStatus,
   getQuotaSnapshot,
+  getAdjustedWorkdayQuotaRemaining,
+  countVietnamBusinessDaysUntil,
+  isWeeklyQuota,
   resetQuotaCache() {
     g.quotaSnapshot = null;
     g.quotaSnapshotExpiresAt = 0;

@@ -129,6 +129,7 @@ Notes:
 - Telegram commands work from private chats and group chats that have a real `from.id`
 - Telegram bot supports `/key`, `/report`, and `/report7`
 - Telegram-managed API keys are active only on Monday-Friday, `08:00-18:30` in `Asia/Ho_Chi_Minh`
+- `/report` and `/report7` show `Quota now` as the current weekday burn budget remaining for weekly quotas, with a fixed `10%` safety buffer already deducted
 - `/key` still requires the sender to have a Telegram `username`; `/report` and `/report7` do not
 - Telegram clients that support bot command menus will show `/key`, `/report`, and `/report7` from the native slash-command menu
 
