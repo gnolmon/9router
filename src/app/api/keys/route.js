@@ -39,6 +39,7 @@ export async function POST(request) {
       telegramUserId: apiKey.telegramUserId,
       scheduleMode: apiKey.scheduleMode,
       updatedAt: apiKey.updatedAt,
+      forcedModel: apiKey.forcedModel,
     }, { status: 201 });
   } catch (error) {
     console.log("Error creating key:", error);

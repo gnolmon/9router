@@ -193,18 +193,25 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const sortBy = searchParams.get("sortBy") || "rawModel";
-  const sortOrder = searchParams.get("sortOrder") || "asc";
-
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
-  const [tableView, setTableView] = useState("model");
+  const [tableView, setTableView] = useState("apiKey");
   const [viewMode, setViewMode] = useState("costs");
   const [providers, setProviders] = useState([]);
   const [periodLocal, setPeriodLocal] = useState("today");
   const period = periodProp ?? periodLocal;
   const setPeriod = setPeriodProp ?? setPeriodLocal;
+  const sortBy = searchParams.get("sortBy") || (
+    tableView === "apiKey"
+      ? "keyName"
+      : tableView === "account"
+        ? "accountName"
+        : tableView === "endpoint"
+          ? "endpoint"
+          : "rawModel"
+  );
+  const sortOrder = searchParams.get("sortOrder") || "asc";
 
   // Fetch connected providers once, deduplicate by provider type
   // Always include noAuth free providers (e.g. opencode) regardless of connections

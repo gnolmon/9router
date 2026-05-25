@@ -24,6 +24,7 @@ function rowToKey(row) {
     scheduleMode: row.scheduleMode || API_KEY_SCHEDULE_MODES.NONE,
     updatedAt: row.updatedAt || row.createdAt,
     manualDisabled: boolFromDb(row.manualDisabled),
+    forcedModel: row.forcedModel || null,
     createdAt: row.createdAt,
   };
 }
@@ -39,6 +40,9 @@ function normalizeKeyRecord(data, now = new Date()) {
     telegramUserId: data.telegramUserId ? String(data.telegramUserId) : null,
     scheduleMode: data.scheduleMode || API_KEY_SCHEDULE_MODES.NONE,
     manualDisabled: data.manualDisabled === true,
+    forcedModel: typeof data.forcedModel === "string" && data.forcedModel.trim()
+      ? data.forcedModel.trim()
+      : null,
     createdAt: data.createdAt || nowIso,
     updatedAt: nowIso,
   };
@@ -48,8 +52,8 @@ function normalizeKeyRecord(data, now = new Date()) {
 
 function persistKey(db, key) {
   db.run(
-    `INSERT INTO apiKeys(id, key, name, machineId, isActive, source, telegramUserId, scheduleMode, updatedAt, manualDisabled, createdAt)
-     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO apiKeys(id, key, name, machineId, isActive, source, telegramUserId, scheduleMode, updatedAt, manualDisabled, forcedModel, createdAt)
+     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        key = excluded.key,
        name = excluded.name,
@@ -60,6 +64,7 @@ function persistKey(db, key) {
        scheduleMode = excluded.scheduleMode,
        updatedAt = excluded.updatedAt,
        manualDisabled = excluded.manualDisabled,
+       forcedModel = excluded.forcedModel,
        createdAt = excluded.createdAt`,
     [
       key.id,
@@ -72,6 +77,7 @@ function persistKey(db, key) {
       key.scheduleMode,
       key.updatedAt,
       key.manualDisabled ? 1 : 0,
+      key.forcedModel,
       key.createdAt,
     ]
   );
@@ -95,6 +101,12 @@ export async function getApiKeys() {
 export async function getApiKeyById(id) {
   const db = await getAdapter();
   const row = db.get(`SELECT * FROM apiKeys WHERE id = ?`, [id]);
+  return rowToKey(row);
+}
+
+export async function getApiKeyByKey(key) {
+  const db = await getAdapter();
+  const row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
   return rowToKey(row);
 }
 
@@ -214,18 +226,29 @@ export async function reconcileTelegramApiKeySchedule(now = new Date()) {
 }
 
 export async function validateApiKey(key) {
+  const validated = await resolveValidatedApiKey(key);
+  return !!validated;
+}
+
+export async function resolveValidatedApiKey(key) {
   const db = await getAdapter();
   const row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
-  if (!row) return false;
+  if (!row) return null;
 
   const normalized = rowToKey(row);
-  const desired = computeApiKeyIsActive(normalized, new Date());
+  const now = new Date();
+  const desired = computeApiKeyIsActive(normalized, now);
   if (desired !== normalized.isActive) {
     db.run(`UPDATE apiKeys SET isActive = ?, updatedAt = ? WHERE id = ?`, [
       desired ? 1 : 0,
-      new Date().toISOString(),
+      now.toISOString(),
       normalized.id,
     ]);
   }
-  return desired;
+  if (!desired) return null;
+  return {
+    ...normalized,
+    isActive: desired,
+    updatedAt: desired !== normalized.isActive ? now.toISOString() : normalized.updatedAt,
+  };
 }

@@ -83,6 +83,7 @@ export const TABLES = {
       scheduleMode: "TEXT DEFAULT 'none'",
       updatedAt: "TEXT",
       manualDisabled: "INTEGER DEFAULT 0",
+      forcedModel: "TEXT",
       createdAt: "TEXT NOT NULL",
     },
     indexes: [

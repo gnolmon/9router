@@ -5,7 +5,8 @@ import {
   markAccountUnavailable,
   clearAccountError,
   extractApiKey,
-  isValidApiKey,
+  getForcedModelOverride,
+  getValidatedApiKeyRecord,
 } from "../services/auth.js";
 import { cacheClaudeHeaders } from "open-sse/utils/claudeHeaderCache.js";
 import { getSettings } from "@/lib/localDb";
@@ -45,17 +46,8 @@ export async function handleChat(request, clientRawRequest = null) {
   }
   cacheClaudeHeaders(clientRawRequest.headers);
 
-  // Log request endpoint and model
-  const url = new URL(request.url);
-  const modelStr = body.model;
-
-  // Count messages (support both messages[] and input[] formats)
-  const msgCount = body.messages?.length || body.input?.length || 0;
-  const toolCount = body.tools?.length || 0;
-  const effort = body.reasoning_effort || body.reasoning?.effort || null;
-  log.request("POST", `${url.pathname} | ${modelStr} | ${msgCount} msgs${toolCount ? ` | ${toolCount} tools` : ""}${effort ? ` | effort=${effort}` : ""}`);
-
   // Log API key (masked)
+  const url = new URL(request.url);
   const authHeader = request.headers.get("Authorization");
   const apiKey = extractApiKey(request);
   if (authHeader && apiKey) {
@@ -67,17 +59,29 @@ export async function handleChat(request, clientRawRequest = null) {
 
   // Enforce API key if enabled in settings
   const settings = await getSettings();
+  const validatedApiKey = apiKey ? await getValidatedApiKeyRecord(apiKey) : null;
   if (settings.requireApiKey) {
     if (!apiKey) {
       log.warn("AUTH", "Missing API key (requireApiKey=true)");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
     }
-    const valid = await isValidApiKey(apiKey);
-    if (!valid) {
+    if (!validatedApiKey) {
       log.warn("AUTH", "Invalid API key (requireApiKey=true)");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
     }
   }
+
+  const forcedModel = getForcedModelOverride(validatedApiKey);
+  if (forcedModel && forcedModel !== body.model) {
+    log.info("AUTH", `API key forced model: ${body.model || "(none)"} → ${forcedModel}`);
+    body = { ...body, model: forcedModel };
+  }
+
+  const modelStr = body.model;
+  const msgCount = body.messages?.length || body.input?.length || 0;
+  const toolCount = body.tools?.length || 0;
+  const effort = body.reasoning_effort || body.reasoning?.effort || null;
+  log.request("POST", `${url.pathname} | ${modelStr} | ${msgCount} msgs${toolCount ? ` | ${toolCount} tools` : ""}${effort ? ` | effort=${effort}` : ""}`);
 
   if (!modelStr) {
     log.warn("CHAT", "Missing model");

@@ -3,7 +3,8 @@ import {
   markAccountUnavailable,
   clearAccountError,
   extractApiKey,
-  isValidApiKey,
+  getForcedModelOverride,
+  getValidatedApiKeyRecord,
 } from "../services/auth.js";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
@@ -33,15 +34,22 @@ export async function handleImageGeneration(request) {
   const preferredConnectionId = request.headers.get("x-connection-id") || null;
   const wantsStream = (request.headers.get("accept") || "").includes("text/event-stream");
   const binaryOutput = url.searchParams.get("response_format") === "binary";
-  const modelStr = body.model;
 
   const apiKey = extractApiKey(request);
   const settings = await getSettings();
+  const validatedApiKey = apiKey ? await getValidatedApiKeyRecord(apiKey) : null;
   if (settings.requireApiKey) {
     if (!apiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
-    const valid = await isValidApiKey(apiKey);
-    if (!valid) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
+    if (!validatedApiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
   }
+
+  const forcedModel = getForcedModelOverride(validatedApiKey);
+  if (forcedModel && forcedModel !== body.model) {
+    log.info("AUTH", `API key forced model: ${body.model || "(none)"} → ${forcedModel}`);
+    body = { ...body, model: forcedModel };
+  }
+
+  const modelStr = body.model;
 
   if (!modelStr) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
   if (!body.prompt) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing required field: prompt");

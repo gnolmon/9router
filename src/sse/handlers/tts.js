@@ -1,5 +1,6 @@
 import {
-  extractApiKey, isValidApiKey,
+  extractApiKey,
+  getForcedModelOverride, getValidatedApiKeyRecord,
   getProviderCredentials, markAccountUnavailable,
 } from "../services/auth.js";
 import { getSettings } from "@/lib/localDb";
@@ -27,18 +28,25 @@ export async function handleTts(request) {
   }
 
   const url = new URL(request.url);
-  const modelStr = body.model;
   const responseFormat = url.searchParams.get("response_format") || "mp3"; // mp3 (default) | json
   const language = body.language || ""; // Optional language hint (currently used by Gemini)
-  log.request("POST", `${url.pathname} | ${modelStr} | format=${responseFormat}${language ? ` | lang=${language}` : ""}`);
 
   const settings = await getSettings();
+  const apiKey = extractApiKey(request);
+  const validatedApiKey = apiKey ? await getValidatedApiKeyRecord(apiKey) : null;
   if (settings.requireApiKey) {
-    const apiKey = extractApiKey(request);
     if (!apiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
-    const valid = await isValidApiKey(apiKey);
-    if (!valid) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
+    if (!validatedApiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
   }
+
+  const forcedModel = getForcedModelOverride(validatedApiKey);
+  if (forcedModel && forcedModel !== body.model) {
+    log.info("AUTH", `API key forced model: ${body.model || "(none)"} → ${forcedModel}`);
+    body = { ...body, model: forcedModel };
+  }
+
+  const modelStr = body.model;
+  log.request("POST", `${url.pathname} | ${modelStr} | format=${responseFormat}${language ? ` | lang=${language}` : ""}`);
 
   if (!modelStr) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
   if (!body.input) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing required field: input");

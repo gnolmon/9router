@@ -29,9 +29,9 @@ export {
 
 // API keys
 export {
-  getApiKeys, getApiKeyById, getApiKeyByTelegramUserId,
+  getApiKeys, getApiKeyById, getApiKeyByKey, getApiKeyByTelegramUserId,
   createApiKey, upsertTelegramApiKey, updateApiKey, deleteApiKey,
-  reconcileTelegramApiKeySchedule, validateApiKey,
+  reconcileTelegramApiKeySchedule, resolveValidatedApiKey, validateApiKey,
 } from "./repos/apiKeysRepo.js";
 
 // Combos
@@ -91,6 +91,7 @@ export async function exportDb() {
       scheduleMode: r.scheduleMode || "none",
       updatedAt: r.updatedAt || r.createdAt,
       manualDisabled: r.manualDisabled === 1,
+      forcedModel: r.forcedModel || null,
       createdAt: r.createdAt,
     })),
     combos: db.all(`SELECT * FROM combos`).map((r) => ({ id: r.id, name: r.name, kind: r.kind, models: parseJson(r.models, []), createdAt: r.createdAt, updatedAt: r.updatedAt })),
@@ -152,8 +153,8 @@ export async function importDb(payload) {
     }
     for (const k of payload.apiKeys || []) {
       db.run(
-        `INSERT OR REPLACE INTO apiKeys(id, key, name, machineId, isActive, source, telegramUserId, scheduleMode, updatedAt, manualDisabled, createdAt)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO apiKeys(id, key, name, machineId, isActive, source, telegramUserId, scheduleMode, updatedAt, manualDisabled, forcedModel, createdAt)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           k.id,
           k.key,
@@ -165,6 +166,7 @@ export async function importDb(payload) {
           k.scheduleMode || "none",
           k.updatedAt || k.createdAt || new Date().toISOString(),
           k.manualDisabled === true ? 1 : 0,
+          k.forcedModel || null,
           k.createdAt || new Date().toISOString(),
         ]
       );

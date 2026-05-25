@@ -3,7 +3,8 @@ import {
   markAccountUnavailable,
   clearAccountError,
   extractApiKey,
-  isValidApiKey,
+  getForcedModelOverride,
+  getValidatedApiKeyRecord,
 } from "../services/auth.js";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo } from "../services/model.js";
@@ -28,12 +29,8 @@ export async function handleEmbeddings(request) {
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid JSON body");
   }
 
-  const url = new URL(request.url);
-  const modelStr = body.model;
-
-  log.request("POST", `${url.pathname} | ${modelStr}`);
-
   // Log API key (masked)
+  const url = new URL(request.url);
   const apiKey = extractApiKey(request);
   if (apiKey) {
     log.debug("AUTH", `API Key: ${log.maskKey(apiKey)}`);
@@ -43,17 +40,26 @@ export async function handleEmbeddings(request) {
 
   // Enforce API key if enabled in settings
   const settings = await getSettings();
+  const validatedApiKey = apiKey ? await getValidatedApiKeyRecord(apiKey) : null;
   if (settings.requireApiKey) {
     if (!apiKey) {
       log.warn("AUTH", "Missing API key (requireApiKey=true)");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
     }
-    const valid = await isValidApiKey(apiKey);
-    if (!valid) {
+    if (!validatedApiKey) {
       log.warn("AUTH", "Invalid API key (requireApiKey=true)");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
     }
   }
+
+  const forcedModel = getForcedModelOverride(validatedApiKey);
+  if (forcedModel && forcedModel !== body.model) {
+    log.info("AUTH", `API key forced model: ${body.model || "(none)"} → ${forcedModel}`);
+    body = { ...body, model: forcedModel };
+  }
+
+  const modelStr = body.model;
+  log.request("POST", `${url.pathname} | ${modelStr}`);
 
   if (!modelStr) {
     log.warn("EMBEDDINGS", "Missing model");

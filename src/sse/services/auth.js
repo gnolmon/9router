@@ -1,4 +1,4 @@
-import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings } from "@/lib/localDb";
+import { getProviderConnections, resolveValidatedApiKey, validateApiKey, updateProviderConnection, getSettings } from "@/lib/localDb";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
@@ -305,4 +305,15 @@ export function extractApiKey(request) {
 export async function isValidApiKey(apiKey) {
   if (!apiKey) return false;
   return await validateApiKey(apiKey);
+}
+
+export async function getValidatedApiKeyRecord(apiKey) {
+  if (!apiKey) return null;
+  return await resolveValidatedApiKey(apiKey);
+}
+
+export function getForcedModelOverride(apiKeyRecord) {
+  if (!apiKeyRecord?.forcedModel || typeof apiKeyRecord.forcedModel !== "string") return null;
+  const forcedModel = apiKeyRecord.forcedModel.trim();
+  return forcedModel || null;
 }

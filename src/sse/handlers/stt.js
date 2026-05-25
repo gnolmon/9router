@@ -1,5 +1,6 @@
 import {
-  extractApiKey, isValidApiKey,
+  extractApiKey,
+  getForcedModelOverride, getValidatedApiKeyRecord,
   getProviderCredentials, markAccountUnavailable,
 } from "../services/auth.js";
 import { getSettings } from "@/lib/localDb";
@@ -25,16 +26,22 @@ export async function handleStt(request) {
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid multipart form data");
   }
 
+  const settings = await getSettings();
+  const apiKey = extractApiKey(request);
+  const validatedApiKey = apiKey ? await getValidatedApiKeyRecord(apiKey) : null;
+  if (settings.requireApiKey) {
+    if (!apiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
+    if (!validatedApiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
+  }
+
+  const forcedModel = getForcedModelOverride(validatedApiKey);
+  if (forcedModel && forcedModel !== formData.get("model")) {
+    log.info("AUTH", `API key forced model: ${formData.get("model") || "(none)"} → ${forcedModel}`);
+    formData.set("model", forcedModel);
+  }
+
   const modelStr = formData.get("model");
   log.request("POST", `/v1/audio/transcriptions | ${modelStr}`);
-
-  const settings = await getSettings();
-  if (settings.requireApiKey) {
-    const apiKey = extractApiKey(request);
-    if (!apiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
-    const valid = await isValidApiKey(apiKey);
-    if (!valid) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
-  }
 
   if (!modelStr) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
   if (!formData.get("file")) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing required field: file");

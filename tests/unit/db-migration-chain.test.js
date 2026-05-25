@@ -40,7 +40,7 @@ describe("Schema migrations", () => {
 
     const apiKeyColumns = db.all(`PRAGMA table_info(apiKeys)`).map((c) => c.name);
     expect(apiKeyColumns).toEqual(expect.arrayContaining([
-      "source", "telegramUserId", "scheduleMode", "updatedAt", "manualDisabled",
+      "source", "telegramUserId", "scheduleMode", "updatedAt", "manualDisabled", "forcedModel",
     ]));
 
     const apiKeyIndexes = db.all(`PRAGMA index_list(apiKeys)`).map((i) => i.name);

@@ -55,16 +55,34 @@ describe("DB SQLite layer — public API parity", () => {
     expect(k.isActive).toBe(true);
     expect(k.source).toBe("manual");
     expect(k.scheduleMode).toBe("none");
+    expect(k.forcedModel).toBeNull();
 
     const all = await sqliteDb.getApiKeys();
     expect(all.find((x) => x.id === k.id)).toBeDefined();
 
     expect(await sqliteDb.validateApiKey(k.key)).toBeTruthy();
+    expect(await sqliteDb.resolveValidatedApiKey(k.key)).toMatchObject({ id: k.id, forcedModel: null });
     expect(await sqliteDb.validateApiKey("invalid")).toBeFalsy();
 
     const deleted = await sqliteDb.deleteApiKey(k.id);
     expect(deleted).toBe(true);
     expect(await sqliteDb.getApiKeyById(k.id)).toBeNull();
+  });
+
+  it("apiKeys: forced model persists through update and export/import", async () => {
+    const key = await sqliteDb.createApiKey("forced-model-key", "machine-xyz");
+    const updated = await sqliteDb.updateApiKey(key.id, { forcedModel: "openai/gpt-5.4-mini" });
+    expect(updated.forcedModel).toBe("openai/gpt-5.4-mini");
+
+    const byId = await sqliteDb.getApiKeyById(key.id);
+    expect(byId.forcedModel).toBe("openai/gpt-5.4-mini");
+
+    const validated = await sqliteDb.resolveValidatedApiKey(key.key);
+    expect(validated.forcedModel).toBe("openai/gpt-5.4-mini");
+
+    const exported = await sqliteDb.exportDb();
+    const exportedKey = exported.apiKeys.find((item) => item.id === key.id);
+    expect(exportedKey.forcedModel).toBe("openai/gpt-5.4-mini");
   });
 
   it("apiKeys: telegram keys reuse by telegramUserId and obey schedule/manual pause", async () => {

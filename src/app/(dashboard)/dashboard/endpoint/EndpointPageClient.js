@@ -53,13 +53,41 @@ const CAVEMAN_LEVELS = [
   { id: "full", label: "Full", desc: "Drop articles, fragments OK" },
   { id: "ultra", label: "Ultra", desc: "Telegraphic, max compression" },
 ];
+
+function normalizeAvailableModels(models = []) {
+  const seen = new Set();
+  return models
+    .filter((model) => {
+      const fullModel = model?.fullModel;
+      if (!fullModel || seen.has(fullModel)) return false;
+      seen.add(fullModel);
+      return true;
+    })
+    .sort((a, b) => String(a.alias || a.fullModel).localeCompare(String(b.alias || b.fullModel)));
+}
+
+function formatModelOptionLabel(model) {
+  if (!model?.fullModel) return "";
+  if (model.alias && model.alias !== model.model) {
+    return `${model.alias} (${model.fullModel})`;
+  }
+  return model.fullModel;
+}
+
+function supportsForcedModelSelection(key) {
+  return ["manual", "telegram"].includes(key?.source || "manual");
+}
+
 export default function APIPageClient({ machineId }) {
   const [keys, setKeys] = useState([]);
+  const [availableModels, setAvailableModels] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [modelsLoading, setModelsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
+  const [savingForcedModelIds, setSavingForcedModelIds] = useState(new Set());
 
   const [requireApiKey, setRequireApiKey] = useState(false);
   const [requireLogin, setRequireLogin] = useState(true);
@@ -131,6 +159,7 @@ export default function APIPageClient({ machineId }) {
 
   useEffect(() => {
     fetchData();
+    loadAvailableModels();
     loadSettings();
   }, []);
 
@@ -334,6 +363,20 @@ export default function APIPageClient({ machineId }) {
       console.log("Error fetching data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAvailableModels = async () => {
+    try {
+      const res = await fetch("/api/models", { cache: "no-store" });
+      const data = await res.json();
+      if (res.ok) {
+        setAvailableModels(normalizeAvailableModels(data.models || []));
+      }
+    } catch (error) {
+      console.log("Error fetching models:", error);
+    } finally {
+      setModelsLoading(false);
     }
   };
 
@@ -735,6 +778,29 @@ export default function APIPageClient({ machineId }) {
       }
     } catch (error) {
       console.log("Error toggling key:", error);
+    }
+  };
+
+  const handleForcedModelChange = async (id, forcedModel) => {
+    setSavingForcedModelIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`/api/keys/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ forcedModel: forcedModel || null }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setKeys((prev) => prev.map((key) => key.id === id ? { ...key, ...(data.key || {}), id } : key));
+      }
+    } catch (error) {
+      console.log("Error updating forced model:", error);
+    } finally {
+      setSavingForcedModelIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -1163,6 +1229,31 @@ export default function APIPageClient({ machineId }) {
                   <p className="text-xs text-text-muted mt-1">
                     Created {new Date(key.createdAt).toLocaleDateString()}
                   </p>
+                  {supportsForcedModelSelection(key) && (
+                    <div className="mt-2 flex max-w-full items-center gap-2">
+                      <span className="text-xs text-text-muted shrink-0">Model</span>
+                      <select
+                        value={key.forcedModel || ""}
+                        onChange={(e) => handleForcedModelChange(key.id, e.target.value)}
+                        disabled={modelsLoading || savingForcedModelIds.has(key.id)}
+                        className="min-w-0 max-w-[360px] rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        style={{ colorScheme: "auto" }}
+                      >
+                        <option value="">Client requested model</option>
+                        {key.forcedModel && !availableModels.some((model) => model.fullModel === key.forcedModel) && (
+                          <option value={key.forcedModel}>{`${key.forcedModel} (Unavailable)`}</option>
+                        )}
+                        {availableModels.map((model) => (
+                          <option key={model.fullModel} value={model.fullModel}>
+                            {formatModelOptionLabel(model)}
+                          </option>
+                        ))}
+                      </select>
+                      {savingForcedModelIds.has(key.id) && (
+                        <span className="material-symbols-outlined animate-spin text-[14px] text-text-muted">progress_activity</span>
+                      )}
+                    </div>
+                  )}
                   {key.isActive === false && (
                     <p className="text-xs text-orange-500 mt-1">Paused</p>
                   )}
