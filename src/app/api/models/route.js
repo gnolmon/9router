@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getModelAliases, setModelAlias } from "@/models";
+import { getCustomModels, getModelAliases, setModelAlias } from "@/models";
 import { getDisabledModels } from "@/lib/disabledModelsDb";
 import { AI_MODELS } from "@/shared/constants/config";
 import { getProviderAlias } from "@/shared/constants/providers";
@@ -9,21 +9,52 @@ export async function GET() {
   try {
     const modelAliases = await getModelAliases();
     const disabled = await getDisabledModels();
+    const customModels = await getCustomModels();
 
-    const models = AI_MODELS
-      .filter((m) => {
-        const alias = getProviderAlias(m.provider) || m.provider;
-        const list = disabled[alias] || disabled[m.provider] || [];
-        return !list.includes(m.model);
-      })
-      .map((m) => {
-        const fullModel = `${m.provider}/${m.model}`;
-        return {
-          ...m,
-          fullModel,
-          alias: modelAliases[fullModel] || m.model,
-        };
+    const isModelDisabled = (providerAlias, providerId, modelId) => {
+      const aliasList = disabled[providerAlias] || [];
+      const providerList = disabled[providerId] || [];
+      return aliasList.includes(modelId) || providerList.includes(modelId);
+    };
+
+    const modelsByFullModel = new Map();
+
+    for (const model of AI_MODELS) {
+      const providerAlias = getProviderAlias(model.provider) || model.provider;
+      if (isModelDisabled(providerAlias, model.provider, model.model)) {
+        continue;
+      }
+
+      const fullModel = `${model.provider}/${model.model}`;
+      modelsByFullModel.set(fullModel, {
+        ...model,
+        fullModel,
+        alias: modelAliases[fullModel] || model.model,
       });
+    }
+
+    for (const customModel of customModels) {
+      const providerAlias = String(customModel?.providerAlias || "").trim();
+      const modelId = String(customModel?.id || "").trim();
+      const modelType = customModel?.type || "llm";
+      if (!providerAlias || !modelId) continue;
+      if (modelType !== "llm") continue;
+      if (isModelDisabled(providerAlias, providerAlias, modelId)) continue;
+
+      const fullModel = `${providerAlias}/${modelId}`;
+      if (modelsByFullModel.has(fullModel)) continue;
+
+      modelsByFullModel.set(fullModel, {
+        provider: providerAlias,
+        model: modelId,
+        name: customModel?.name || modelId,
+        type: modelType,
+        fullModel,
+        alias: modelAliases[fullModel] || customModel?.name || modelId,
+      });
+    }
+
+    const models = Array.from(modelsByFullModel.values());
 
     return NextResponse.json({ models });
   } catch (error) {
