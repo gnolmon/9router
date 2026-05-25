@@ -1,5 +1,6 @@
 import { getProviderConnections, resolveValidatedApiKey, validateApiKey, updateProviderConnection, getSettings } from "@/lib/localDb";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
+import { API_KEY_SOURCES } from "@/lib/apiKeys/schedule.js";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { resolveProviderId, FREE_PROVIDERS } from "@/shared/constants/providers.js";
@@ -7,6 +8,73 @@ import * as log from "../utils/logger.js";
 
 // Mutex to prevent race conditions during account selection
 let selectionMutex = Promise.resolve();
+const USER_SPARK_FORCED_MODELS = new Set([
+  "cx/gpt-5.3-codex-spark",
+  "codex/gpt-5.3-codex-spark",
+]);
+const USER_IMAGE_FALLBACK_MODEL = "cx/gpt-5.4";
+
+function hasOpenAiImagePart(part) {
+  if (!part || typeof part !== "object") return false;
+
+  if (part.type === "image_url") {
+    const url = typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
+    return typeof url === "string" && url.length > 0;
+  }
+
+  if (part.type === "input_image") {
+    return Boolean(part.image_url || part.file_id);
+  }
+
+  if (part.type === "image") {
+    return Boolean(part.source?.data || part.source?.url);
+  }
+
+  return false;
+}
+
+function hasGeminiImagePart(part) {
+  if (!part || typeof part !== "object") return false;
+  const inlineMimeType = part.inlineData?.mimeType || "";
+  const fileMimeType = part.fileData?.mimeType || "";
+  return inlineMimeType.startsWith("image/") || fileMimeType.startsWith("image/");
+}
+
+function requestContainsImage(body) {
+  if (!body || typeof body !== "object") return false;
+
+  if (Array.isArray(body.messages)) {
+    for (const message of body.messages) {
+      if (!message || typeof message !== "object") continue;
+      if (Array.isArray(message.content) && message.content.some(hasOpenAiImagePart)) {
+        return true;
+      }
+    }
+  }
+
+  const inputItems = Array.isArray(body.input)
+    ? body.input
+    : (body.input && typeof body.input === "object" ? [body.input] : []);
+  for (const item of inputItems) {
+    if (!item || typeof item !== "object") continue;
+    if (hasOpenAiImagePart(item)) return true;
+    if (Array.isArray(item.content) && item.content.some(hasOpenAiImagePart)) {
+      return true;
+    }
+  }
+
+  const geminiContents = [
+    ...(Array.isArray(body.contents) ? body.contents : []),
+    ...(Array.isArray(body.request?.contents) ? body.request.contents : []),
+  ];
+  for (const content of geminiContents) {
+    if (Array.isArray(content?.parts) && content.parts.some(hasGeminiImagePart)) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 /**
  * Get provider credentials from localDb
@@ -312,8 +380,15 @@ export async function getValidatedApiKeyRecord(apiKey) {
   return await resolveValidatedApiKey(apiKey);
 }
 
-export function getForcedModelOverride(apiKeyRecord) {
+export function getForcedModelOverride(apiKeyRecord, body = null) {
   if (!apiKeyRecord?.forcedModel || typeof apiKeyRecord.forcedModel !== "string") return null;
   const forcedModel = apiKeyRecord.forcedModel.trim();
+  if (
+    apiKeyRecord.source === API_KEY_SOURCES.TELEGRAM &&
+    USER_SPARK_FORCED_MODELS.has(forcedModel) &&
+    requestContainsImage(body)
+  ) {
+    return USER_IMAGE_FALLBACK_MODEL;
+  }
   return forcedModel || null;
 }

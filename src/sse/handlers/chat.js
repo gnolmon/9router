@@ -71,7 +71,7 @@ export async function handleChat(request, clientRawRequest = null) {
     }
   }
 
-  const forcedModel = getForcedModelOverride(validatedApiKey);
+  const forcedModel = getForcedModelOverride(validatedApiKey, body);
   if (forcedModel && forcedModel !== body.model) {
     log.info("AUTH", `API key forced model: ${body.model || "(none)"} → ${forcedModel}`);
     body = { ...body, model: forcedModel };
