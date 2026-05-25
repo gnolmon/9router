@@ -113,6 +113,11 @@ npm run build
 PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
 ```
 
+Large request bodies:
+
+- 9Router sets Next.js `experimental.proxyClientMaxBodySize` to `500 MB` by default to better handle large Codex/Responses payloads such as inline base64 images.
+- Override with `NEXT_PROXY_CLIENT_MAX_BODY_SIZE_BYTES` if your deployment needs a different limit.
+
 Default URLs:
 - Dashboard: `http://localhost:20128/dashboard`
 - OpenAI-compatible API: `http://localhost:20128/v1`

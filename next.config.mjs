@@ -8,6 +8,18 @@ const tracingRoot = process.env.NEXT_TRACING_ROOT_MODE === "workspace"
   ? join(projectRoot, "..")
   : projectRoot;
 
+const DEFAULT_PROXY_CLIENT_MAX_BODY_SIZE = 500 * 1024 * 1024;
+
+function resolveProxyClientMaxBodySize() {
+  const rawValue = process.env.NEXT_PROXY_CLIENT_MAX_BODY_SIZE_BYTES;
+  if (!rawValue) return DEFAULT_PROXY_CLIENT_MAX_BODY_SIZE;
+
+  const parsed = Number.parseInt(rawValue, 10);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_PROXY_CLIENT_MAX_BODY_SIZE;
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
@@ -22,6 +34,11 @@ const nextConfig = {
   },
   images: {
     unoptimized: true
+  },
+  experimental: {
+    // Codex/Responses payloads can include inline base64 image data and exceed
+    // Next.js's default 10 MB proxy buffering limit, which truncates the body.
+    proxyClientMaxBodySize: resolveProxyClientMaxBodySize(),
   },
   env: {},
   webpack: (config, { isServer }) => {
