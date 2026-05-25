@@ -54,11 +54,21 @@ const CAVEMAN_LEVELS = [
   { id: "ultra", label: "Ultra", desc: "Telegraphic, max compression" },
 ];
 
+const FORCED_MODEL_PROVIDER = "cx";
+
+function normalizeForcedModelValue(model) {
+  if (typeof model !== "string" || !model) return "";
+  if (!model.startsWith("codex/")) return model;
+  return `${FORCED_MODEL_PROVIDER}/${model.slice("codex/".length)}`;
+}
+
 function normalizeAvailableModels(models = []) {
   const seen = new Set();
   return models
     .filter((model) => {
-      const fullModel = model?.fullModel;
+      if (model?.provider !== FORCED_MODEL_PROVIDER) return false;
+      if ((model?.type || "llm") !== "llm") return false;
+      const fullModel = normalizeForcedModelValue(model?.fullModel);
       if (!fullModel || seen.has(fullModel)) return false;
       seen.add(fullModel);
       return true;
@@ -67,11 +77,12 @@ function normalizeAvailableModels(models = []) {
 }
 
 function formatModelOptionLabel(model) {
-  if (!model?.fullModel) return "";
+  const fullModel = normalizeForcedModelValue(model?.fullModel);
+  if (!fullModel) return "";
   if (model.alias && model.alias !== model.model) {
-    return `${model.alias} (${model.fullModel})`;
+    return `${model.alias} (${fullModel})`;
   }
-  return model.fullModel;
+  return fullModel;
 }
 
 function supportsForcedModelSelection(key) {
@@ -782,12 +793,13 @@ export default function APIPageClient({ machineId }) {
   };
 
   const handleForcedModelChange = async (id, forcedModel) => {
+    const normalizedForcedModel = normalizeForcedModelValue(forcedModel);
     setSavingForcedModelIds((prev) => new Set(prev).add(id));
     try {
       const res = await fetch(`/api/keys/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ forcedModel: forcedModel || null }),
+        body: JSON.stringify({ forcedModel: normalizedForcedModel || null }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -1233,18 +1245,18 @@ export default function APIPageClient({ machineId }) {
                     <div className="mt-2 flex max-w-full items-center gap-2">
                       <span className="text-xs text-text-muted shrink-0">Model</span>
                       <select
-                        value={key.forcedModel || ""}
+                        value={normalizeForcedModelValue(key.forcedModel) || ""}
                         onChange={(e) => handleForcedModelChange(key.id, e.target.value)}
                         disabled={modelsLoading || savingForcedModelIds.has(key.id)}
                         className="min-w-0 max-w-[360px] rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40"
                         style={{ colorScheme: "auto" }}
                       >
                         <option value="">Client requested model</option>
-                        {key.forcedModel && !availableModels.some((model) => model.fullModel === key.forcedModel) && (
-                          <option value={key.forcedModel}>{`${key.forcedModel} (Unavailable)`}</option>
+                        {key.forcedModel && !availableModels.some((model) => normalizeForcedModelValue(model.fullModel) === normalizeForcedModelValue(key.forcedModel)) && (
+                          <option value={normalizeForcedModelValue(key.forcedModel)}>{`${normalizeForcedModelValue(key.forcedModel)} (Unavailable)`}</option>
                         )}
                         {availableModels.map((model) => (
-                          <option key={model.fullModel} value={model.fullModel}>
+                          <option key={model.fullModel} value={normalizeForcedModelValue(model.fullModel)}>
                             {formatModelOptionLabel(model)}
                           </option>
                         ))}
