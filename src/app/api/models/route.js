@@ -10,6 +10,10 @@ export async function GET() {
     const modelAliases = await getModelAliases();
     const disabled = await getDisabledModels();
     const customModels = await getCustomModels();
+    const aliasByFullModel = Object.fromEntries(
+      Object.entries(modelAliases).filter(([, fullModel]) => typeof fullModel === "string")
+        .map(([alias, fullModel]) => [fullModel, alias])
+    );
 
     const isModelDisabled = (providerAlias, providerId, modelId) => {
       const aliasList = disabled[providerAlias] || [];
@@ -18,39 +22,50 @@ export async function GET() {
     };
 
     const modelsByFullModel = new Map();
+    const addModel = ({ provider, model, name, type = "llm" }) => {
+      const rawProvider = String(provider || "").trim();
+      const modelId = String(model || "").trim();
+      if (!rawProvider || !modelId) return;
 
-    for (const model of AI_MODELS) {
-      const providerAlias = getProviderAlias(model.provider) || model.provider;
-      if (isModelDisabled(providerAlias, model.provider, model.model)) {
-        continue;
-      }
-
-      const fullModel = `${model.provider}/${model.model}`;
-      modelsByFullModel.set(fullModel, {
-        ...model,
-        fullModel,
-        alias: modelAliases[fullModel] || model.model,
-      });
-    }
-
-    for (const customModel of customModels) {
-      const providerAlias = String(customModel?.providerAlias || "").trim();
-      const modelId = String(customModel?.id || "").trim();
-      const modelType = customModel?.type || "llm";
-      if (!providerAlias || !modelId) continue;
-      if (modelType !== "llm") continue;
-      if (isModelDisabled(providerAlias, providerAlias, modelId)) continue;
+      const providerAlias = getProviderAlias(rawProvider) || rawProvider;
+      if (type !== "llm") return;
+      if (isModelDisabled(providerAlias, rawProvider, modelId)) return;
 
       const fullModel = `${providerAlias}/${modelId}`;
-      if (modelsByFullModel.has(fullModel)) continue;
+      if (modelsByFullModel.has(fullModel)) return;
 
       modelsByFullModel.set(fullModel, {
         provider: providerAlias,
         model: modelId,
-        name: customModel?.name || modelId,
-        type: modelType,
+        name: name || modelId,
+        type,
         fullModel,
-        alias: modelAliases[fullModel] || customModel?.name || modelId,
+        alias: aliasByFullModel[fullModel] || modelId,
+      });
+    };
+
+    for (const model of AI_MODELS) {
+      addModel(model);
+    }
+
+    for (const customModel of customModels) {
+      addModel({
+        provider: customModel?.providerAlias,
+        model: customModel?.id,
+        name: customModel?.name,
+        type: customModel?.type || "llm",
+      });
+    }
+
+    for (const [alias, fullModel] of Object.entries(modelAliases)) {
+      if (typeof fullModel !== "string") continue;
+      const separatorIndex = fullModel.indexOf("/");
+      if (separatorIndex <= 0 || separatorIndex === fullModel.length - 1) continue;
+
+      addModel({
+        provider: fullModel.slice(0, separatorIndex),
+        model: fullModel.slice(separatorIndex + 1),
+        name: alias,
       });
     }
 
