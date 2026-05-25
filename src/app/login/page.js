@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Card, Button, Input } from "@/shared/components";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [password, setPassword] = useState("");
@@ -14,7 +13,12 @@ export default function LoginPage() {
   const [authMode, setAuthMode] = useState("password");
   const [oidcConfigured, setOidcConfigured] = useState(false);
   const [oidcLoginLabel, setOidcLoginLabel] = useState("Sign in with OIDC");
-  const router = useRouter();
+
+  const redirectToDashboard = () => {
+    if (typeof window !== "undefined") {
+      window.location.replace("/dashboard");
+    }
+  };
 
   // Countdown for rate-limit
   useEffect(() => {
@@ -38,8 +42,7 @@ export default function LoginPage() {
         if (res.ok) {
           const data = await res.json();
           if (data.requireLogin === false) {
-            router.push("/dashboard");
-            router.refresh();
+            redirectToDashboard();
             return;
           }
           setHasPassword(!!data.hasPassword);
@@ -56,7 +59,7 @@ export default function LoginPage() {
       }
     }
     checkAuth();
-  }, [router]);
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -72,8 +75,7 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
-        router.push("/dashboard");
-        router.refresh();
+        redirectToDashboard();
       } else {
         const data = await res.json();
         setError(data.error || "Invalid password");
