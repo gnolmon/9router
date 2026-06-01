@@ -79,7 +79,7 @@ function buildManualTemporaryDisableMessage(apiKey, disabledUntil) {
   return [
     "API key của bạn đã tạm bị vô hiệu hóa.",
     `API key: ${apiKey.name || apiKey.telegramUserId || "unknown"}`,
-    "Quản trị viên đã tạm chuyển key sang inactive để bảo vệ quota hệ thống.",
+    "Bot đã tự động tạm chuyển key sang inactive để bảo vệ quota hệ thống.",
     `Key sẽ tự mở lại lúc 08:00 ngày làm việc tiếp theo (${VIETNAM_TIMEZONE}).`,
     `Mốc mở lại: ${formatVietnamDateTime(disabledUntil)}`,
   ].join("\n");
