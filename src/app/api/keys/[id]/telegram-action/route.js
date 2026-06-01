@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getApiKeyById } from "@/lib/localDb";
 import {
+  clearTemporaryDisableTelegramApiKey,
   sendManualTelegramUsageWarning,
   temporaryDisableTelegramApiKey,
 } from "@/lib/telegram/usageLimits.js";
@@ -31,6 +32,14 @@ export async function POST(request, { params }) {
         ok: true,
         action,
         disabledUntil: result.disabledUntil,
+        key: result.key,
+      });
+    }
+    if (action === "clear-temporary-disable") {
+      const result = await clearTemporaryDisableTelegramApiKey(key);
+      return NextResponse.json({
+        ok: true,
+        action,
         key: result.key,
       });
     }

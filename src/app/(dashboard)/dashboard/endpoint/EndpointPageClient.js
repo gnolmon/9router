@@ -93,6 +93,12 @@ function supportsTelegramActions(key) {
   return key?.source === "telegram" && !!key?.telegramUserId;
 }
 
+function getActiveTemporaryDisableUntil(key) {
+  if (!key?.temporaryDisabledUntil) return "";
+  const untilMs = new Date(key.temporaryDisabledUntil).getTime();
+  return Number.isFinite(untilMs) && untilMs > Date.now() ? key.temporaryDisabledUntil : "";
+}
+
 export default function APIPageClient({ machineId }) {
   const [keys, setKeys] = useState([]);
   const [availableModels, setAvailableModels] = useState([]);
@@ -850,12 +856,16 @@ export default function APIPageClient({ machineId }) {
   };
 
   const confirmTemporaryDisableTelegramKey = (key) => {
+    const isTempDisabled = !!getActiveTemporaryDisableUntil(key);
+    const action = isTempDisabled ? "clear-temporary-disable" : "temporary-disable";
     setConfirmState({
-      title: "Temporary Disable Telegram Key",
-      message: `Temporarily disable "${key.name}" and notify the Telegram user?\n\nThis key will stay inactive until the next business-day 08:00 Vietnam time.`,
+      title: isTempDisabled ? "Clear Temporary Disable" : "Temporary Disable Telegram Key",
+      message: isTempDisabled
+        ? `Clear temporary disable for "${key.name}" and notify the Telegram user?\n\nThe key will become active immediately if the current schedule allows it.`
+        : `Temporarily disable "${key.name}" and notify the Telegram user?\n\nThis key will stay inactive until the next business-day 08:00 Vietnam time.`,
       onConfirm: async () => {
         setConfirmState(null);
-        await handleTelegramKeyAction(key, "temporary-disable");
+        await handleTelegramKeyAction(key, action);
       },
     });
   };
@@ -1253,11 +1263,15 @@ export default function APIPageClient({ machineId }) {
           </div>
         ) : (
           <div className="flex flex-col">
-            {keys.map((key) => (
-              <div
-                key={key.id}
-                className={`group flex items-center justify-between py-3 border-b border-black/[0.03] dark:border-white/[0.03] last:border-b-0 ${key.isActive === false ? "opacity-60" : ""}`}
-              >
+            {keys.map((key) => {
+              const temporaryDisabledUntil = getActiveTemporaryDisableUntil(key);
+              const temporaryDisableAction = temporaryDisabledUntil ? "clear-temporary-disable" : "temporary-disable";
+              const temporaryDisablePending = telegramActionIds.has(`${key.id}:${temporaryDisableAction}`);
+              return (
+                <div
+                  key={key.id}
+                  className={`group flex items-center justify-between py-3 border-b border-black/[0.03] dark:border-white/[0.03] last:border-b-0 ${key.isActive === false ? "opacity-60" : ""}`}
+                >
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">{key.name}</p>
                   <div className="flex items-center gap-2 mt-1">
@@ -1313,6 +1327,11 @@ export default function APIPageClient({ machineId }) {
                   {key.isActive === false && (
                     <p className="text-xs text-orange-500 mt-1">Paused</p>
                   )}
+                  {temporaryDisabledUntil && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Temp disabled until {new Date(temporaryDisabledUntil).toLocaleString()}
+                    </p>
+                  )}
                   {supportsTelegramActions(key) && (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <button
@@ -1330,14 +1349,16 @@ export default function APIPageClient({ machineId }) {
                       <button
                         type="button"
                         onClick={() => confirmTemporaryDisableTelegramKey(key)}
-                        disabled={telegramActionIds.has(`${key.id}:temporary-disable`)}
-                        className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300"
-                        title="Temporarily disable and notify Telegram user"
+                        disabled={temporaryDisablePending}
+                        className={temporaryDisabledUntil
+                          ? "inline-flex items-center gap-1 rounded-md border border-green-500/30 bg-green-500/10 px-2 py-1 text-xs font-medium text-green-700 transition hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-green-300"
+                          : "inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300"}
+                        title={temporaryDisabledUntil ? "Clear temporary disable and notify Telegram user" : "Temporarily disable and notify Telegram user"}
                       >
                         <span className="material-symbols-outlined text-[14px]">
-                          {telegramActionIds.has(`${key.id}:temporary-disable`) ? "progress_activity" : "block"}
+                          {temporaryDisablePending ? "progress_activity" : (temporaryDisabledUntil ? "lock_open" : "block")}
                         </span>
-                        Temp disable
+                        {temporaryDisabledUntil ? "Clear temp disable" : "Temp disable"}
                       </button>
                     </div>
                   )}
@@ -1369,8 +1390,9 @@ export default function APIPageClient({ machineId }) {
                     <span className="material-symbols-outlined text-[18px]">delete</span>
                   </button>
                 </div>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>

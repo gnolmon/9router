@@ -85,6 +85,19 @@ function buildManualTemporaryDisableMessage(apiKey, disabledUntil) {
   ].join("\n");
 }
 
+function buildManualTemporaryEnableMessage(apiKey, updated) {
+  const lines = [
+    "API key của bạn đã được gỡ trạng thái tạm vô hiệu hóa.",
+    `API key: ${apiKey.name || apiKey.telegramUserId || "unknown"}`,
+  ];
+  if (updated?.isActive) {
+    lines.push("Key hiện đã active trở lại.");
+  } else {
+    lines.push(`Key sẽ hoạt động lại trong khung giờ cho phép: thứ 2-6, 08:00-18:30 (${VIETNAM_TIMEZONE}).`);
+  }
+  return lines.join("\n");
+}
+
 function assertTelegramApiKey(apiKey) {
   if (
     !apiKey ||
@@ -119,6 +132,23 @@ export async function temporaryDisableTelegramApiKey(apiKey, now = new Date()) {
     action: "temporary-disable",
     apiKeyId: apiKey.id,
     disabledUntil: disabledUntil.toISOString(),
+    key: updated,
+  };
+}
+
+export async function clearTemporaryDisableTelegramApiKey(apiKey, now = new Date()) {
+  assertTelegramApiKey(apiKey);
+  const updated = await updateApiKey(apiKey.id, {
+    temporaryDisabledUntil: null,
+    now,
+  });
+  await sendTelegramMessage(
+    apiKey.telegramUserId,
+    buildManualTemporaryEnableMessage(apiKey, updated)
+  );
+  return {
+    action: "clear-temporary-disable",
+    apiKeyId: apiKey.id,
     key: updated,
   };
 }
@@ -204,4 +234,5 @@ export const __test__ = {
   buildHardLimitMessage,
   buildManualWarningMessage,
   buildManualTemporaryDisableMessage,
+  buildManualTemporaryEnableMessage,
 };
