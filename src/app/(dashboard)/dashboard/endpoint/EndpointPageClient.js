@@ -89,6 +89,10 @@ function supportsForcedModelSelection(key) {
   return ["manual", "telegram"].includes(key?.source || "manual");
 }
 
+function supportsTelegramActions(key) {
+  return key?.source === "telegram" && !!key?.telegramUserId;
+}
+
 export default function APIPageClient({ machineId }) {
   const [keys, setKeys] = useState([]);
   const [availableModels, setAvailableModels] = useState([]);
@@ -99,6 +103,7 @@ export default function APIPageClient({ machineId }) {
   const [createdKey, setCreatedKey] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
   const [savingForcedModelIds, setSavingForcedModelIds] = useState(new Set());
+  const [telegramActionIds, setTelegramActionIds] = useState(new Set());
 
   const [requireApiKey, setRequireApiKey] = useState(false);
   const [requireLogin, setRequireLogin] = useState(true);
@@ -816,6 +821,45 @@ export default function APIPageClient({ machineId }) {
     }
   };
 
+  const handleTelegramKeyAction = async (key, action) => {
+    const actionId = `${key.id}:${action}`;
+    setTelegramActionIds((prev) => new Set(prev).add(actionId));
+    try {
+      const res = await fetch(`/api/keys/${key.id}/telegram-action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Telegram action failed");
+      if (data.key) {
+        setKeys((prev) => prev.map((item) => item.id === key.id ? { ...item, ...data.key } : item));
+      }
+    } catch (error) {
+      console.log("Error running Telegram key action:", error);
+      if (typeof window !== "undefined") {
+        window.alert(error.message || "Telegram action failed");
+      }
+    } finally {
+      setTelegramActionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(actionId);
+        return next;
+      });
+    }
+  };
+
+  const confirmTemporaryDisableTelegramKey = (key) => {
+    setConfirmState({
+      title: "Temporary Disable Telegram Key",
+      message: `Temporarily disable "${key.name}" and notify the Telegram user?\n\nThis key will stay inactive until the next business-day 08:00 Vietnam time.`,
+      onConfirm: async () => {
+        setConfirmState(null);
+        await handleTelegramKeyAction(key, "temporary-disable");
+      },
+    });
+  };
+
   const maskKey = (fullKey) => {
     if (!fullKey) return "";
     return fullKey.length > 8 ? fullKey.slice(0, 8) + "..." : fullKey;
@@ -1268,6 +1312,34 @@ export default function APIPageClient({ machineId }) {
                   )}
                   {key.isActive === false && (
                     <p className="text-xs text-orange-500 mt-1">Paused</p>
+                  )}
+                  {supportsTelegramActions(key) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleTelegramKeyAction(key, "warning")}
+                        disabled={telegramActionIds.has(`${key.id}:warning`)}
+                        className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-amber-300"
+                        title="Send Telegram warning message"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">
+                          {telegramActionIds.has(`${key.id}:warning`) ? "progress_activity" : "warning"}
+                        </span>
+                        Send warning
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => confirmTemporaryDisableTelegramKey(key)}
+                        disabled={telegramActionIds.has(`${key.id}:temporary-disable`)}
+                        className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300"
+                        title="Temporarily disable and notify Telegram user"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">
+                          {telegramActionIds.has(`${key.id}:temporary-disable`) ? "progress_activity" : "block"}
+                        </span>
+                        Temp disable
+                      </button>
+                    </div>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
