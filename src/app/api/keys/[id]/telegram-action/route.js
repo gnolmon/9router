@@ -40,6 +40,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({
         ok: true,
         action,
+        limitOverride: result.limitOverride,
         key: result.key,
       });
     }

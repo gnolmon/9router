@@ -130,7 +130,7 @@ Notes:
 - Telegram bot supports `/key`, `/report`, and `/report7`
 - Telegram-managed API keys are active only on Monday-Friday, `08:00-18:30` in `Asia/Ho_Chi_Minh`
 - Telegram-managed API keys send one daily warning after reaching `400 USD` or `180M` tokens, and are temporarily disabled until the next business-day `08:00` after reaching `700 USD` or `300M` tokens
-- Endpoint → API Keys can manually send a Telegram warning, temporarily disable a Telegram-managed key until the next business-day `08:00`, or clear that temporary disable early
+- Endpoint → API Keys can manually send a Telegram warning, temporarily disable a Telegram-managed key until the next business-day `08:00`, or clear that temporary disable early; clearing also raises that key's hard limit for the current Vietnam day by another `700 USD` / `300M` tokens to avoid immediate re-disable
 - `/report` and `/report7` show `Quota Remaining Today` for weekly quotas as the current workday burn budget remaining after excluding future weekend days; a fixed `10%` safety buffer is deducted silently
 - On Saturday and Sunday in Vietnam time, `/key`, `/report`, and `/report7` reply with a short weekend rest greeting instead of returning a key or report
 - In Endpoint settings, API keys can optionally force a single model from the current Available Models list; when set, client-supplied model names are ignored for model-based API routes

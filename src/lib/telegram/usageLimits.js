@@ -1,5 +1,5 @@
 import { getAdapter } from "@/lib/db/driver.js";
-import { stringifyJson } from "@/lib/db/helpers/jsonCol.js";
+import { parseJson, stringifyJson } from "@/lib/db/helpers/jsonCol.js";
 import { getApiKeyByKey, updateApiKey } from "@/lib/db/repos/apiKeysRepo.js";
 import {
   API_KEY_SOURCES,
@@ -16,6 +16,8 @@ const WARNING_TOKENS = 180_000_000;
 const HARD_COST_USD = 700;
 const HARD_TOKENS = 300_000_000;
 const KV_SCOPE = "telegramUsageLimits";
+const MANUAL_CLEAR_EXTRA_COST_USD = HARD_COST_USD;
+const MANUAL_CLEAR_EXTRA_TOKENS = HARD_TOKENS;
 
 function formatUsd(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -43,6 +45,52 @@ function claimOnce(db, key, value) {
     [KV_SCOPE, key, stringifyJson(value)]
   );
   return (result?.changes ?? 0) > 0;
+}
+
+function getLimitOverrideKey(dateKey, apiKeyId) {
+  return `${dateKey}|${apiKeyId}|manual-clear-limit`;
+}
+
+function getDailyLimitOverride(db, dateKey, apiKeyId) {
+  const row = db.get(`SELECT value FROM kv WHERE scope = ? AND key = ?`, [
+    KV_SCOPE,
+    getLimitOverrideKey(dateKey, apiKeyId),
+  ]);
+  return row ? parseJson(row.value, null) : null;
+}
+
+function getEffectiveHardLimits(override) {
+  const overrideCost = Number(override?.hardCostUsd || 0);
+  const overrideTokens = Number(override?.hardTokens || 0);
+  return {
+    hardCostUsd: Math.max(HARD_COST_USD, Number.isFinite(overrideCost) ? overrideCost : 0),
+    hardTokens: Math.max(HARD_TOKENS, Number.isFinite(overrideTokens) ? overrideTokens : 0),
+  };
+}
+
+function isHardLimitReached(totals, hardLimits) {
+  return (
+    Number(totals?.totalCost || 0) >= Number(hardLimits?.hardCostUsd || HARD_COST_USD) ||
+    Number(totals?.totalTokens || 0) >= Number(hardLimits?.hardTokens || HARD_TOKENS)
+  );
+}
+
+function setDailyLimitOverride(db, apiKey, now) {
+  const dateKey = getVietnamDateKey(now);
+  const totals = getDailyTotals(db, apiKey.key, now);
+  const override = {
+    at: now.toISOString(),
+    baseCostUsd: totals.totalCost,
+    baseTokens: totals.totalTokens,
+    hardCostUsd: Math.max(HARD_COST_USD, totals.totalCost + MANUAL_CLEAR_EXTRA_COST_USD),
+    hardTokens: Math.max(HARD_TOKENS, totals.totalTokens + MANUAL_CLEAR_EXTRA_TOKENS),
+  };
+  db.run(
+    `INSERT INTO kv(scope, key, value) VALUES(?, ?, ?)
+     ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value`,
+    [KV_SCOPE, getLimitOverrideKey(dateKey, apiKey.id), stringifyJson(override)]
+  );
+  return override;
 }
 
 function buildWarningMessage(apiKey, totals) {
@@ -85,10 +133,11 @@ function buildManualTemporaryDisableMessage(apiKey, disabledUntil) {
   ].join("\n");
 }
 
-function buildManualTemporaryEnableMessage(apiKey, updated) {
+function buildManualTemporaryEnableMessage(apiKey, updated, override) {
   const lines = [
     "API key của bạn đã được gỡ trạng thái tạm vô hiệu hóa.",
     `API key: ${apiKey.name || apiKey.telegramUserId || "unknown"}`,
+    `Hạn mức tạm thời trong hôm nay đã được nâng lên ${formatUsd(override?.hardCostUsd)} hoặc ${formatTokens(override?.hardTokens)}.`,
   ];
   if (updated?.isActive) {
     lines.push("Key hiện đã active trở lại.");
@@ -138,17 +187,20 @@ export async function temporaryDisableTelegramApiKey(apiKey, now = new Date()) {
 
 export async function clearTemporaryDisableTelegramApiKey(apiKey, now = new Date()) {
   assertTelegramApiKey(apiKey);
+  const db = await getAdapter();
+  const override = setDailyLimitOverride(db, apiKey, now);
   const updated = await updateApiKey(apiKey.id, {
     temporaryDisabledUntil: null,
     now,
   });
   await sendTelegramMessage(
     apiKey.telegramUserId,
-    buildManualTemporaryEnableMessage(apiKey, updated)
+    buildManualTemporaryEnableMessage(apiKey, updated, override)
   );
   return {
     action: "clear-temporary-disable",
     apiKeyId: apiKey.id,
+    limitOverride: override,
     key: updated,
   };
 }
@@ -186,10 +238,9 @@ export async function enforceTelegramDailyUsageLimits(entry) {
   const db = await getAdapter();
   const totals = getDailyTotals(db, rawApiKey, now);
   const dateKey = getVietnamDateKey(now);
+  const hardLimits = getEffectiveHardLimits(getDailyLimitOverride(db, dateKey, apiKey.id));
 
-  const hardLimitReached =
-    totals.totalCost >= HARD_COST_USD ||
-    totals.totalTokens >= HARD_TOKENS;
+  const hardLimitReached = isHardLimitReached(totals, hardLimits);
   const warningReached =
     totals.totalCost >= WARNING_COST_USD ||
     totals.totalTokens >= WARNING_TOKENS;
@@ -230,9 +281,14 @@ export const __test__ = {
   WARNING_TOKENS,
   HARD_COST_USD,
   HARD_TOKENS,
+  MANUAL_CLEAR_EXTRA_COST_USD,
+  MANUAL_CLEAR_EXTRA_TOKENS,
   buildWarningMessage,
   buildHardLimitMessage,
   buildManualWarningMessage,
   buildManualTemporaryDisableMessage,
   buildManualTemporaryEnableMessage,
+  getEffectiveHardLimits,
+  getLimitOverrideKey,
+  isHardLimitReached,
 };
