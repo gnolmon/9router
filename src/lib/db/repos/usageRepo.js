@@ -8,6 +8,7 @@ import {
   formatVietnamDateTime,
   getVietnamStartOfDay,
 } from "@/lib/apiKeys/schedule.js";
+import { enforceTelegramDailyUsageLimits } from "@/lib/telegram/usageLimits.js";
 
 const PENDING_TIMEOUT_MS = 60 * 1000;
 const RING_CAP = 50;
@@ -285,6 +286,9 @@ export async function saveRequestUsage(entry) {
       db.run(`INSERT INTO _meta(key, value) VALUES('totalRequestsLifetime', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, [String(next)]);
     });
 
+    enforceTelegramDailyUsageLimits(entry).catch((error) => {
+      console.error("[TelegramUsageLimit] Failed to enforce daily limits:", error.message);
+    });
     pushToRing(entry);
     statsEmitter.emit("update");
   } catch (e) {

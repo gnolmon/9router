@@ -87,6 +87,10 @@ export function isScheduleActive(scheduleMode, now = new Date()) {
 export function computeApiKeyIsActive(apiKey, now = new Date()) {
   const manualDisabled = apiKey?.manualDisabled === true;
   if (manualDisabled) return false;
+  if (apiKey?.temporaryDisabledUntil) {
+    const disabledUntilMs = new Date(apiKey.temporaryDisabledUntil).getTime();
+    if (Number.isFinite(disabledUntilMs) && now.getTime() < disabledUntilMs) return false;
+  }
   return isScheduleActive(apiKey?.scheduleMode, now);
 }
 
@@ -105,6 +109,16 @@ export function getNextVietnamScheduleTransition(now = new Date()) {
     if (isVietnamBusinessWeekday(candidate)) {
       return buildVietnamDate(parts, dayOffset, 8, 0);
     }
+    dayOffset += 1;
+  }
+}
+
+export function getNextVietnamBusinessStartAfter(now = new Date()) {
+  const parts = getVietnamLocalParts(now);
+  let dayOffset = 1;
+  while (true) {
+    const candidate = buildVietnamDate(parts, dayOffset, 8, 0);
+    if (isVietnamBusinessWeekday(candidate)) return candidate;
     dayOffset += 1;
   }
 }

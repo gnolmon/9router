@@ -61,7 +61,7 @@ This layer handles:
 - `src/lib/tunnel/*` manages Cloudflare Tunnel and Tailscale
 - `src/mitm/*` manages MITM server, certs, and DNS hooks
 - `src/lib/network/*` handles outbound proxy support and connectivity helpers
-- `src/lib/telegram/*` handles Telegram polling, `/key`, `/report`, `/report7`, native command-menu sync, and Telegram-specific quota/usage reports
+- `src/lib/telegram/*` handles Telegram polling, `/key`, `/report`, `/report7`, native command-menu sync, Telegram-specific quota/usage reports, and Telegram-key daily usage limit notifications
 
 ## Key Architectural Decisions
 

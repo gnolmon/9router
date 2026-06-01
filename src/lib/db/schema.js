@@ -1,5 +1,5 @@
 // Latest schema version — bumped when a migration is added in ./migrations/
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -84,6 +84,7 @@ export const TABLES = {
       updatedAt: "TEXT",
       manualDisabled: "INTEGER DEFAULT 0",
       forcedModel: "TEXT",
+      temporaryDisabledUntil: "TEXT",
       createdAt: "TEXT NOT NULL",
     },
     indexes: [

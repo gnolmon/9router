@@ -25,6 +25,7 @@ function rowToKey(row) {
     updatedAt: row.updatedAt || row.createdAt,
     manualDisabled: boolFromDb(row.manualDisabled),
     forcedModel: row.forcedModel || null,
+    temporaryDisabledUntil: row.temporaryDisabledUntil || null,
     createdAt: row.createdAt,
   };
 }
@@ -43,6 +44,9 @@ function normalizeKeyRecord(data, now = new Date()) {
     forcedModel: typeof data.forcedModel === "string" && data.forcedModel.trim()
       ? data.forcedModel.trim()
       : null,
+    temporaryDisabledUntil: typeof data.temporaryDisabledUntil === "string" && data.temporaryDisabledUntil.trim()
+      ? data.temporaryDisabledUntil.trim()
+      : null,
     createdAt: data.createdAt || nowIso,
     updatedAt: nowIso,
   };
@@ -52,8 +56,8 @@ function normalizeKeyRecord(data, now = new Date()) {
 
 function persistKey(db, key) {
   db.run(
-    `INSERT INTO apiKeys(id, key, name, machineId, isActive, source, telegramUserId, scheduleMode, updatedAt, manualDisabled, forcedModel, createdAt)
-     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO apiKeys(id, key, name, machineId, isActive, source, telegramUserId, scheduleMode, updatedAt, manualDisabled, forcedModel, temporaryDisabledUntil, createdAt)
+     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        key = excluded.key,
        name = excluded.name,
@@ -65,6 +69,7 @@ function persistKey(db, key) {
        updatedAt = excluded.updatedAt,
        manualDisabled = excluded.manualDisabled,
        forcedModel = excluded.forcedModel,
+       temporaryDisabledUntil = excluded.temporaryDisabledUntil,
        createdAt = excluded.createdAt`,
     [
       key.id,
@@ -78,6 +83,7 @@ function persistKey(db, key) {
       key.updatedAt,
       key.manualDisabled ? 1 : 0,
       key.forcedModel,
+      key.temporaryDisabledUntil,
       key.createdAt,
     ]
   );

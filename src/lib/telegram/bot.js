@@ -15,7 +15,7 @@ const COMMAND_PATTERNS = [
   ["report7", /^\/report7(?:@\w+)?(?:\s|$)/i],
   ["report", /^\/report(?:@\w+)?(?:\s|$)/i],
 ];
-const WEEKEND_REPLY = "Cuoi tuan roi, chuc ban nghi ngoi thoai mai va vui ve nhe!";
+const WEEKEND_REPLY = "Cuối tuần rồi, chúc bạn nghỉ ngơi thoải mái và vui vẻ nhé!";
 const botKv = makeKv("telegramBot");
 
 const g = global.__telegramBotRuntime ??= {

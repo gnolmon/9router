@@ -5,6 +5,7 @@ import {
   formatVietnamDateTime,
   getVietnamDateKey,
   getVietnamStartOfDay,
+  getNextVietnamBusinessStartAfter,
   getNextVietnamScheduleTransition,
   isVietnamBusinessHours,
   isVietnamBusinessWeekday,
@@ -35,6 +36,15 @@ describe("API key schedule", () => {
     expect(computeApiKeyIsActive(key, new Date("2026-05-22T01:30:00.000Z"))).toBe(false);
   });
 
+  it("lets temporary disable override schedule until its deadline", () => {
+    const key = {
+      scheduleMode: API_KEY_SCHEDULE_MODES.VN_BUSINESS_HOURS,
+      temporaryDisabledUntil: "2026-05-25T01:00:00.000Z",
+    };
+    expect(computeApiKeyIsActive(key, new Date("2026-05-22T02:00:00.000Z"))).toBe(false);
+    expect(computeApiKeyIsActive(key, new Date("2026-05-25T01:00:00.000Z"))).toBe(true);
+  });
+
   it("computes next schedule transition in Vietnam time", () => {
     expect(getNextVietnamScheduleTransition(new Date("2026-05-22T00:00:00.000Z")).toISOString())
       .toBe("2026-05-22T01:00:00.000Z");
@@ -45,6 +55,13 @@ describe("API key schedule", () => {
     expect(getNextVietnamScheduleTransition(new Date("2026-05-23T03:00:00.000Z")).toISOString())
       .toBe("2026-05-25T01:00:00.000Z");
     expect(getNextVietnamScheduleTransition(new Date("2026-05-24T12:00:00.000Z")).toISOString())
+      .toBe("2026-05-25T01:00:00.000Z");
+  });
+
+  it("computes next business-day 08:00 for temporary disable", () => {
+    expect(getNextVietnamBusinessStartAfter(new Date("2026-05-21T04:00:00.000Z")).toISOString())
+      .toBe("2026-05-22T01:00:00.000Z");
+    expect(getNextVietnamBusinessStartAfter(new Date("2026-05-22T04:00:00.000Z")).toISOString())
       .toBe("2026-05-25T01:00:00.000Z");
   });
 
