@@ -1,7 +1,12 @@
 // Ensure proxyFetch is loaded to patch globalThis.fetch
 import "open-sse/index.js";
 
-import { fetchUsageForConnection } from "@/lib/usage/connectionUsage";
+import {
+  fetchUsageForConnection,
+  refreshAndUpdateCredentials,
+} from "@/lib/usage/connectionUsage";
+
+export { refreshAndUpdateCredentials };
 
 export async function GET(request, { params }) {
   let connectionId = "unknown";

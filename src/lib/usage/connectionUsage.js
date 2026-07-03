@@ -14,8 +14,10 @@ function isAuthExpiredMessage(usage) {
 
 export function isUsageEligibleConnection(connection) {
   if (!connection) return false;
+  const isOAuth = connection.authType === "oauth";
+  const isApikeyAuth = connection.authType === "apikey" || connection.authType === "api_key";
   return USAGE_SUPPORTED_PROVIDERS.includes(connection.provider) && (
-    connection.authType === "oauth" || USAGE_APIKEY_PROVIDERS.includes(connection.provider)
+    isOAuth || (isApikeyAuth && USAGE_APIKEY_PROVIDERS.includes(connection.provider))
   );
 }
 
@@ -30,12 +32,15 @@ export async function getConnectionUsageProxyOptions(connection) {
   };
 }
 
-async function refreshAndUpdateCredentials(connection, force = false, proxyOptions = null) {
+export async function refreshAndUpdateCredentials(connection, force = false, proxyOptions = null) {
   const executor = getExecutor(connection.provider);
   const credentials = {
     accessToken: connection.accessToken,
     refreshToken: connection.refreshToken,
+    idToken: connection.idToken,
     expiresAt: connection.expiresAt || connection.tokenExpiresAt,
+    lastRefreshAt: connection.lastRefreshAt,
+    connectionId: connection.id,
     providerSpecificData: connection.providerSpecificData,
     copilotToken: connection.providerSpecificData?.copilotToken,
     copilotTokenExpiresAt: connection.providerSpecificData?.copilotTokenExpiresAt,
@@ -59,17 +64,24 @@ async function refreshAndUpdateCredentials(connection, force = false, proxyOptio
 
   if (refreshResult.accessToken) updateData.accessToken = refreshResult.accessToken;
   if (refreshResult.refreshToken) updateData.refreshToken = refreshResult.refreshToken;
+  if (refreshResult.idToken) updateData.idToken = refreshResult.idToken;
+  if (refreshResult.lastRefreshAt) updateData.lastRefreshAt = refreshResult.lastRefreshAt;
   if (refreshResult.expiresIn) {
     updateData.expiresAt = new Date(Date.now() + refreshResult.expiresIn * 1000).toISOString();
+    updateData.expiresIn = refreshResult.expiresIn;
   } else if (refreshResult.expiresAt) {
     updateData.expiresAt = refreshResult.expiresAt;
   }
 
-  if (refreshResult.copilotToken || refreshResult.copilotTokenExpiresAt) {
+  const providerSpecificUpdates = {
+    ...(refreshResult.providerSpecificData || {}),
+    ...(refreshResult.copilotToken ? { copilotToken: refreshResult.copilotToken } : {}),
+    ...(refreshResult.copilotTokenExpiresAt ? { copilotTokenExpiresAt: refreshResult.copilotTokenExpiresAt } : {}),
+  };
+  if (Object.keys(providerSpecificUpdates).length > 0) {
     updateData.providerSpecificData = {
-      ...connection.providerSpecificData,
-      copilotToken: refreshResult.copilotToken,
-      copilotTokenExpiresAt: refreshResult.copilotTokenExpiresAt,
+      ...(connection.providerSpecificData || {}),
+      ...providerSpecificUpdates,
     };
   }
 
@@ -78,6 +90,7 @@ async function refreshAndUpdateCredentials(connection, force = false, proxyOptio
     connection: {
       ...connection,
       ...updateData,
+      providerSpecificData: updateData.providerSpecificData || connection.providerSpecificData,
     },
     refreshed: true,
   };
