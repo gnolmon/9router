@@ -45,6 +45,10 @@ CLOUD_URL=https://9router.com
 NEXT_PUBLIC_BASE_URL=http://localhost:20128
 NEXT_PUBLIC_CLOUD_URL=https://9router.com
 TELEGRAM_POLL_TIMEOUT_SECONDS=25
+# Optional local/dev controls. Default package still uses embedded bot token.
+# TELEGRAM_DISABLED=1
+# TELEGRAM_BOT_DISABLED=1
+# TELEGRAM_BOT_TOKEN_OVERRIDE=123456:local-dev-token
 ```
 
 Optional outbound proxy variables:
@@ -125,7 +129,7 @@ Notes:
 - `src/lib/usageDb.js` still writes legacy usage files outside the main SQLite path
 - Tunnel and MITM features may need extra OS-level permissions or installed binaries
 - Some provider integrations depend on OAuth or cookie sessions that may be unstable or risky
-- Telegram bot polling is single-instance only when packaging this build, because the bot token is embedded in the artifact
+- Telegram bot polling is single-instance only when packaging this build, because the bot token is embedded in the artifact; local/dev runs can set `TELEGRAM_DISABLED=1` to disable all Telegram behavior, `TELEGRAM_BOT_DISABLED=1` to disable polling only, or `TELEGRAM_BOT_TOKEN_OVERRIDE` to use a separate bot
 - Telegram commands work from private chats and group chats that have a real `from.id`
 - Telegram bot supports `/key`, `/report`, and `/report7`
 - Telegram-managed API keys are active only on Monday-Friday, `08:00-18:30` in `Asia/Ho_Chi_Minh`

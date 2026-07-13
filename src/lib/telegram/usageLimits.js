@@ -9,7 +9,7 @@ import {
   getVietnamDateKey,
   getVietnamStartOfDay,
 } from "@/lib/apiKeys/schedule.js";
-import { TELEGRAM_API_BASE_URL } from "./config.js";
+import { TELEGRAM_API_BASE_URL, isTelegramDisabled } from "./config.js";
 
 const WARNING_COST_USD = 400;
 const WARNING_TOKENS = 180_000_000;
@@ -28,6 +28,7 @@ function formatTokens(value) {
 }
 
 export async function sendTelegramMessage(chatId, text) {
+  if (isTelegramDisabled()) return;
   const response = await fetch(`${TELEGRAM_API_BASE_URL}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -222,6 +223,7 @@ function getDailyTotals(db, apiKey, now) {
 }
 
 export async function enforceTelegramDailyUsageLimits(entry) {
+  if (isTelegramDisabled()) return null;
   const rawApiKey = typeof entry?.apiKey === "string" ? entry.apiKey : "";
   if (!rawApiKey) return null;
 
