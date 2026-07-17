@@ -117,6 +117,28 @@ describe("telegram report builder", () => {
     expect(mocks.getTelegramUsageShareSummary).toHaveBeenCalledTimes(2);
   });
 
+  it("returns usage after a quota provider times out", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.fetchUsageForConnection.mockReset();
+      mocks.getProviderConnections.mockResolvedValue([
+        { id: "c1", provider: "codex", name: "Slow account", authType: "oauth", isActive: true },
+      ]);
+      mocks.fetchUsageForConnection.mockReturnValue(new Promise(() => {}));
+
+      const { buildTelegramReport, __test__ } = await loadReportModule();
+      const reportPromise = buildTelegramReport("today", new Date("2026-05-22T02:30:00.000Z"));
+
+      await vi.advanceTimersByTimeAsync(__test__.QUOTA_FETCH_TIMEOUT_MS);
+      const report = await reportPromise;
+
+      expect(report).toContain("<b>Quota Remaining Today</b>: unavailable");
+      expect(report).toContain("<b>Key usage (Today)</b>:");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("formats single-account quota as one compact line", async () => {
     const { __test__ } = await loadReportModule();
     expect(__test__.buildQuotaLine({

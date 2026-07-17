@@ -11,6 +11,7 @@ import {
 } from "@/lib/usage/quotaUtils.js";
 
 const QUOTA_CACHE_TTL_MS = 5 * 60 * 1000;
+const QUOTA_FETCH_TIMEOUT_MS = 15 * 1000;
 const QUOTA_LOW_THRESHOLD = 30;
 const QUOTA_DEPLETED_THRESHOLD = 5;
 const TOP_LOW_QUOTAS_LIMIT = 5;
@@ -18,7 +19,7 @@ const WORKWEEK_DAYS = 5;
 const WORKDAY_BURN_PERCENT = 100 / WORKWEEK_DAYS;
 const QUOTA_BUFFER_PERCENT = 10;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const BUSINESS_START_OFFSET_MS = 8 * 60 * 60 * 1000;
+const BUSINESS_END_OFFSET_MS = (18 * 60 + 30) * 60 * 1000;
 
 const g = global.__telegramReportRuntime ??= {
   quotaSnapshot: null,
@@ -67,6 +68,15 @@ function getQuotaStatus(remaining) {
   return "ok";
 }
 
+function withTimeout(promise, timeoutMs, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function isWeeklyQuota(quotaName) {
   return typeof quotaName === "string" && quotaName.toLowerCase().includes("week");
 }
@@ -80,8 +90,8 @@ function countFutureVietnamBusinessDays(resetAt, now = new Date()) {
 
   while (cursor < resetDate) {
     if (isVietnamBusinessWeekday(cursor)) {
-      const businessStart = new Date(cursor.getTime() + BUSINESS_START_OFFSET_MS);
-      if (businessStart < resetDate) count += 1;
+      const businessEnd = new Date(cursor.getTime() + BUSINESS_END_OFFSET_MS);
+      if (businessEnd <= resetDate) count += 1;
     }
     cursor = new Date(cursor.getTime() + DAY_MS);
   }
@@ -175,7 +185,11 @@ async function loadQuotaSnapshot(now = new Date()) {
 
   const results = await Promise.all(connections.map(async (connection) => {
     try {
-      const usage = await fetchUsageForConnection(connection);
+      const usage = await withTimeout(
+        fetchUsageForConnection(connection),
+        QUOTA_FETCH_TIMEOUT_MS,
+        "Quota fetch timed out",
+      );
       return summarizeQuotaConnection(connection, usage, null, now);
     } catch (error) {
       return summarizeQuotaConnection(connection, null, error, now);
@@ -279,6 +293,7 @@ export async function buildTelegramReport(period = "today", now = new Date()) {
 
 export const __test__ = {
   QUOTA_CACHE_TTL_MS,
+  QUOTA_FETCH_TIMEOUT_MS,
   TOP_LOW_QUOTAS_LIMIT,
   buildQuotaLine,
   buildUsageLines,

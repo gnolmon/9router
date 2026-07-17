@@ -277,6 +277,36 @@ describe("DB SQLite layer — public API parity", () => {
     expect(stats.byProvider.openai.promptTokens).toBeGreaterThanOrEqual(300);
   });
 
+  it("usage: keeps API keys with the same masked prefix in separate groups", async () => {
+    const keyA = await sqliteDb.createApiKey("same-prefix-a", "shared-machine-id");
+    const keyB = await sqliteDb.createApiKey("same-prefix-b", "shared-machine-id");
+
+    expect(keyA.key.slice(0, 8)).toBe(keyB.key.slice(0, 8));
+
+    await sqliteDb.saveRequestUsage({
+      provider: "openai",
+      model: "gpt-4",
+      apiKey: keyA.key,
+      tokens: { prompt_tokens: 10, completion_tokens: 5 },
+      status: "ok",
+    });
+    await sqliteDb.saveRequestUsage({
+      provider: "openai",
+      model: "gpt-4",
+      apiKey: keyB.key,
+      tokens: { prompt_tokens: 20, completion_tokens: 10 },
+      status: "ok",
+    });
+
+    const stats = await sqliteDb.getUsageStats("24h");
+    const names = Object.values(stats.byApiKey).map((item) => item.keyName);
+
+    expect(names).toContain("same-prefix-a");
+    expect(names).toContain("same-prefix-b");
+    expect(Object.keys(stats.byApiKey).join("|")).not.toContain(keyA.key);
+    expect(Object.keys(stats.byApiKey).join("|")).not.toContain(keyB.key);
+  });
+
   it("usage: telegram usage summary respects Vietnam day windows and excludes manual keys", async () => {
     vi.useFakeTimers();
     try {
