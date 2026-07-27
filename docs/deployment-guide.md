@@ -137,7 +137,7 @@ Notes:
 - Endpoint → API Keys can manually send a Telegram warning, temporarily disable a Telegram-managed key until the next business-day `08:00`, or clear that temporary disable early; clearing also raises that key's hard limit for the current Vietnam day by another `700 USD` / `300M` tokens to avoid immediate re-disable
 - `/report` and `/report7` show `Quota Remaining Today` for weekly quotas as the current workday burn budget remaining after excluding future weekend days; a fixed `10%` safety buffer is deducted silently
 - On Saturday and Sunday in Vietnam time, `/key`, `/report`, and `/report7` reply with a short weekend rest greeting instead of returning a key or report
-- In Endpoint settings, API keys can optionally force a single model from the current Available Models list; when set, client-supplied model names are ignored for model-based API routes
+- In Endpoint settings, API keys can optionally force a single model from the current Available Models list; when set, client-supplied model names are ignored for model-based API routes except `/v1/images/generations`, which preserves the image-capable model selected by the media client
 - `/key` still requires the sender to have a Telegram `username`; `/report` and `/report7` do not
 - Telegram clients that support bot command menus will show `/key`, `/report`, and `/report7` from the native slash-command menu
 

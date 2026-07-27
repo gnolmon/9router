@@ -398,7 +398,9 @@ export async function getValidatedApiKeyRecord(apiKey) {
   return await resolveValidatedApiKey(apiKey);
 }
 
-export function getForcedModelOverride(apiKeyRecord, body = null) {
+export function getForcedModelOverride(apiKeyRecord, body = null, { serviceKind } = {}) {
+  // Image routing must preserve the image-capable model selected by the media client.
+  if (serviceKind === "image") return null;
   if (!apiKeyRecord?.forcedModel || typeof apiKeyRecord.forcedModel !== "string") return null;
   const forcedModel = apiKeyRecord.forcedModel.trim();
   if (

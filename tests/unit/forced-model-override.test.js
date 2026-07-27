@@ -3,6 +3,18 @@ import { API_KEY_SOURCES } from "@/lib/apiKeys/schedule.js";
 import { getForcedModelOverride } from "@/sse/services/auth.js";
 
 describe("getForcedModelOverride", () => {
+  it("ignores per-key forced models for image generation requests", () => {
+    const apiKeyRecord = {
+      source: API_KEY_SOURCES.MANUAL,
+      forcedModel: "cx/gpt-5.6-sol",
+    };
+
+    expect(
+      getForcedModelOverride(apiKeyRecord, null, { serviceKind: "image" }),
+    ).toBeNull();
+    expect(getForcedModelOverride(apiKeyRecord)).toBe("cx/gpt-5.6-sol");
+  });
+
   it("upgrades telegram spark keys to cx/gpt-5.4 when the request contains images", () => {
     const override = getForcedModelOverride(
       {

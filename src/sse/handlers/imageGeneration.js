@@ -43,7 +43,7 @@ export async function handleImageGeneration(request) {
     if (!validatedApiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
   }
 
-  const forcedModel = getForcedModelOverride(validatedApiKey);
+  const forcedModel = getForcedModelOverride(validatedApiKey, body, { serviceKind: "image" });
   if (forcedModel && forcedModel !== body.model) {
     log.info("AUTH", `API key forced model: ${body.model || "(none)"} → ${forcedModel}`);
     body = { ...body, model: forcedModel };
